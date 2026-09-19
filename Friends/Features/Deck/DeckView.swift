@@ -3,7 +3,8 @@ import SwiftUI
 /// El mazo de swipe. El mismo componente sirve para citas, amistad, idiomas y
 /// grupos: solo cambia el `context` con el que se pide el mazo al servidor.
 ///
-/// En la pestana Friends hay un selector Amistad | Idiomas dentro de la misma pantalla.
+/// En la pestana Friends hay un selector Amistad | Idiomas dentro de la misma
+/// pantalla.
 struct DeckView: View {
     let context: DeckContext
     var groupSlug: String? = nil
@@ -44,19 +45,22 @@ struct DeckView: View {
 
     var body: some View {
         let model = model
-        ZStack {
-            DoodleBackground()
-            VStack(spacing: 14) {
-                header(model)
+        NavigationStack {
+            VStack(spacing: 12) {
                 if context == .friendship || context == .language { contextPicker }
                 stack(model)
                 if case .ready = model.phase { actions(model) }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, onClose == nil ? 100 : 16)   // deja sitio a la barra flotante
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle(groupName ?? active.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { toolbar(model) }
+            .toolbarTitleDisplayMode(.inline)
         }
-        .toast(Binding(get: { model.toast }, set: { model.toast = $0 }))
+        .tint(active.tint)
+        .errorAlert(Binding(get: { model.error }, set: { model.error = $0 }))
         .overlay { celebration(model) }
         .task(id: active) {
             store.start()
@@ -67,20 +71,28 @@ struct DeckView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await LocationService.shared.syncToServer() } }
         }
-        .onChange(of: model.showPaywall) { _, show in if show { paywallReason = .likeLimit; model.showPaywall = false } }
+        .onChange(of: model.showPaywall) { _, show in
+            if show { paywallReason = .likeLimit; model.showPaywall = false }
+        }
         .sheet(item: $detail) { card in
-            CardDetailView(card: card,
-                           onReport: { detail = nil; report = ReportTarget(kind: .user, id: card.userId, userID: card.userId, displayName: card.displayName) },
-                           onBlock: { detail = nil; Task { if await SafetyActions.block(userID: card.userId) { model.remove(userID: card.userId) } } })
+            CardDetailView(
+                card: card,
+                onReport: {
+                    detail = nil
+                    report = ReportTarget(kind: .user, id: card.userId, userID: card.userId, displayName: card.displayName)
+                },
+                onBlock: {
+                    detail = nil
+                    Task { if await SafetyActions.block(userID: card.userId) { model.remove(userID: card.userId) } }
+                }
+            )
         }
         .sheet(item: $report) { target in
             ReportSheet(target: target) { didBlock in if didBlock { model.remove(userID: target.id) } }
         }
         .sheet(isPresented: $showFilters) { FiltersView { Task { await model.load(reset: true) } } }
         .sheet(isPresented: $showLanguages) { LanguagesEditorView { Task { await model.load(reset: true) } } }
-        .sheet(isPresented: Binding(get: { paywallReason != nil }, set: { if !$0 { paywallReason = nil } })) {
-            PaywallView(reason: paywallReason ?? .generic)
-        }
+        .sheet(item: $paywallReason) { reason in PaywallView(reason: reason) }
         .fullScreenCover(item: $chatMatch) { match in
             if let myID = account.userID {
                 ChatView(match: match, myID: myID) { _ in chatMatch = nil }
@@ -88,52 +100,46 @@ struct DeckView: View {
         }
     }
 
-    // MARK: - Cabecera
+    // MARK: - Barra de navegacion
 
-    private func header(_ model: DeckViewModel) -> some View {
-        HStack(spacing: 10) {
-            if let onClose {
-                Button(action: onClose) {
-                    Image(systemName: "chevron.left").font(.system(size: 18, weight: .black))
-                        .foregroundStyle(Color.lazyBlack).frame(width: 44, height: 44).glassEffect(.regular, in: .circle)
-                }
-                .accessibilityLabel("Volver")
+    @ToolbarContentBuilder
+    private func toolbar(_ model: DeckViewModel) -> some ToolbarContent {
+        if let onClose {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Volver", systemImage: "chevron.left", action: onClose)
             }
-            Text((groupName ?? title(for: active)).uppercased())
-                .font(.lazyHeading).foregroundStyle(Color.lazyBlack).lineLimit(1).minimumScaleFactor(0.6)
-            Spacer()
-            if store.isPremium { Tag(text: "★ Premium", color: .lazyYellow) }
-            else if let left = model.likesLeft {
-                Button { paywallReason = .likeLimit } label: { Tag(text: "♥ \(left)", color: left == 0 ? .lazyNotice : .white) }
-                    .buttonStyle(.plain).accessibilityLabel("\(left) likes restantes hoy")
-            }
-            if active != .group {
-                Button { showFilters = true } label: {
-                    Image(systemName: "slider.horizontal.3").font(.system(size: 18, weight: .black))
-                        .foregroundStyle(Color.lazyBlack).frame(width: 44, height: 44).glassEffect(.regular, in: .circle)
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            if store.isPremium {
+                Label("Premium", systemImage: "star.fill")
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(.yellow)
+                    .accessibilityLabel("Cuenta premium")
+            } else if let left = model.likesLeft {
+                Button { paywallReason = .likeLimit } label: {
+                    Label("\(left)", systemImage: "heart")
+                        .labelStyle(.titleAndIcon)
+                        .font(.footnote)
                 }
-                .accessibilityLabel("Filtros")
+                .accessibilityLabel("Te quedan \(left) likes hoy")
+            }
+        }
+
+        if active != .group {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Filtros", systemImage: "line.3.horizontal.decrease") { showFilters = true }
             }
         }
     }
 
     private var contextPicker: some View {
-        HStack(spacing: 10) {
-            ForEach([DeckContext.friendship, .language], id: \.self) { item in
-                ChoiceChip(label: item == .friendship ? "Amistad" : "Idiomas", emoji: item == .friendship ? "🤝" : "🗣️",
-                           selectedColor: .lazyMint, isSelected: active == item) { withAnimation(.snappy) { active = item } }
-            }
-            Spacer()
+        Picker("Modo", selection: $active) {
+            Text("Amistad").tag(DeckContext.friendship)
+            Text("Idiomas").tag(DeckContext.language)
         }
-    }
-
-    private func title(for context: DeckContext) -> String {
-        switch context {
-        case .dating: "Citas"
-        case .friendship: "Amistad"
-        case .language: "Idiomas"
-        case .group: "Grupo"
-        }
+        .pickerStyle(.segmented)
+        .padding(.top, 4)
     }
 
     // MARK: - Pila
@@ -142,74 +148,117 @@ struct DeckView: View {
     private func stack(_ model: DeckViewModel) -> some View {
         switch model.phase {
         case .loading:
-            VStack { Spacer(); ProgressView().controlSize(.large); Text("Buscando gente…").font(.lazyMono).foregroundStyle(.secondary); Spacer() }
-                .frame(maxWidth: .infinity)
+            ProgressView("Buscando gente…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
         case .ready:
             ZStack {
                 ForEach(Array(model.cards.prefix(3).enumerated().reversed()), id: \.element.id) { index, card in
                     if index == 0 {
-                        DraggableCard(card: card, command: $command, onDecision: { model.decide($0) }, onInfo: { detail = card })
+                        DraggableCard(card: card, command: $command,
+                                      onDecision: { model.decide($0) },
+                                      onInfo: { detail = card })
                             .id(card.id).transition(.identity)
                     } else {
                         ProfileCardView(card: card)
-                            .scaleEffect(1 - CGFloat(index) * 0.045).offset(y: CGFloat(index) * 12)
-                            .allowsHitTesting(false).id(card.id)
+                            .scaleEffect(1 - CGFloat(index) * 0.045)
+                            .offset(y: CGFloat(index) * 12)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                            .id(card.id)
                     }
                 }
             }
-            .padding(.trailing, 5).padding(.bottom, 5)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+
         case .empty:
             emptyState(model)
+
         case .failed(let message):
-            centered { StateCard(emoji: "📡", title: "No pudimos cargar el mazo", message: message,
-                                 actionTitle: "Reintentar") { Task { await model.load(reset: true) } } }
+            ContentUnavailableView {
+                Label("No pudimos cargar el mazo", systemImage: "wifi.exclamationmark")
+            } description: {
+                Text(message)
+            } actions: {
+                Button("Reintentar") { Task { await model.load(reset: true) } }
+                    .buttonStyle(.glassProminent)
+            }
+
         case .needs(let requirement):
-            centered { requirementCard(requirement, model) }
+            requirementState(requirement, model)
         }
     }
 
-    private func centered<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        VStack { Spacer(); content(); Spacer() }
-    }
-
     private func emptyState(_ model: DeckViewModel) -> some View {
-        centered {
-            VStack(spacing: 14) {
-                StateCard(emoji: "🫥", title: "Por ahora no hay nadie más",
-                          message: active == .group ? "Ya viste a todos los miembros. Vuelve cuando se sumen más."
-                                                    : "Amplía tu distancia o tu rango de edad, o vuelve más tarde.",
-                          actionTitle: "Actualizar") { Task { await model.load(reset: true) } }
-                if active != .group {
-                    Button("Ajustar filtros") { showFilters = true }
-                        .buttonStyle(LazyButtonStyle(background: .white, foreground: .lazyBlack, fillsWidth: true))
-                        .padding(.trailing, 5)
-                }
+        ContentUnavailableView {
+            Label("Por ahora no hay nadie más", systemImage: "person.slash")
+        } description: {
+            Text(active == .group
+                 ? "Ya viste a todos los miembros. Vuelve cuando se sumen más."
+                 : "Amplía tu distancia o tu rango de edad, o vuelve más tarde.")
+        } actions: {
+            Button("Actualizar") { Task { await model.load(reset: true) } }
+                .buttonStyle(.glassProminent)
+            if active != .group {
+                Button("Ajustar filtros") { showFilters = true }
             }
         }
     }
 
     @ViewBuilder
-    private func requirementCard(_ requirement: DeckViewModel.Requirement, _ model: DeckViewModel) -> some View {
+    private func requirementState(_ requirement: DeckViewModel.Requirement, _ model: DeckViewModel) -> some View {
         switch requirement {
         case .location:
             let denied = locationService.access == .denied
-            StateCard(emoji: "📍", title: denied ? "Tu ubicación está desactivada" : "Activa tu ubicación",
-                      message: denied ? "Actívala en Ajustes para ver gente cerca. Nunca mostramos tu posición exacta a nadie."
-                                      : "La usamos solo para mostrarte gente cerca. Nadie ve tu posición exacta, solo la distancia aproximada.",
-                      color: .lazyMint, actionTitle: denied ? "Abrir Ajustes" : "Activar ubicación") {
-                if denied { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } }
-                else { Task { if await locationService.requestAccess() { await locationService.syncToServer(); await model.load(reset: true) } } }
+            ContentUnavailableView {
+                Label(denied ? "Tu ubicación está desactivada" : "Activa tu ubicación",
+                      systemImage: denied ? "location.slash" : "location")
+            } description: {
+                Text(denied
+                     ? "Actívala en Ajustes para ver gente cerca. Nunca mostramos tu posición exacta a nadie."
+                     : "La usamos solo para mostrarte gente cerca. Nadie ve tu posición exacta, solo la distancia aproximada.")
+            } actions: {
+                Button(denied ? "Abrir Ajustes" : "Activar ubicación") {
+                    if denied {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                    } else {
+                        Task {
+                            if await locationService.requestAccess() {
+                                await locationService.syncToServer()
+                                await model.load(reset: true)
+                            }
+                        }
+                    }
+                }
+                .buttonStyle(.glassProminent)
             }
+
         case .mode:
-            StateCard(emoji: active == .dating ? "💘" : "🤝", title: "Activa \(title(for: active).lowercased()) en tu perfil",
-                      message: "Ahora mismo no apareces ni ves a nadie en este modo.",
-                      color: .lazyMint, actionTitle: "Activarlo") { Task { await enableMode(model) } }
+            ContentUnavailableView {
+                Label("Activa \(active.title.lowercased()) en tu perfil", systemImage: active.symbol)
+            } description: {
+                Text("Ahora mismo no apareces ni ves a nadie en este modo.")
+            } actions: {
+                Button("Activarlo") { Task { await enableMode(model) } }
+                    .buttonStyle(.glassProminent)
+            }
+
         case .languages:
-            StateCard(emoji: "🗣️", title: "Elige tus idiomas", message: "Emparejamos a quien habla lo que tú aprendes y aprende lo que tú hablas.",
-                      color: .lazyMint, actionTitle: "Elegir idiomas") { showLanguages = true }
+            ContentUnavailableView {
+                Label("Elige tus idiomas", systemImage: "character.bubble")
+            } description: {
+                Text("Emparejamos a quien habla lo que tú aprendes y aprende lo que tú hablas.")
+            } actions: {
+                Button("Elegir idiomas") { showLanguages = true }
+                    .buttonStyle(.glassProminent)
+            }
+
         case .completeProfile:
-            StateCard(emoji: "📝", title: "Completa tu perfil", message: "Necesitas al menos 2 fotos, tus datos básicos y 3 intereses.", color: .lazyNotice)
+            ContentUnavailableView {
+                Label("Completa tu perfil", systemImage: "person.crop.circle.badge.exclamationmark")
+            } description: {
+                Text("Necesitas al menos 2 fotos, tus datos básicos y 3 intereses.")
+            }
         }
     }
 
@@ -220,8 +269,12 @@ struct DeckView: View {
         case .language:   payload.modeLanguage = true
         default:          payload.modeDating = true
         }
-        do { try await APIClient.shared.send(.onboarding, body: payload); await model.load(reset: true) }
-        catch { model.toast = Toast(text: "No se pudo activar. Revisa tu perfil.", isError: true) }
+        do {
+            try await APIClient.shared.send(.onboarding, body: payload)
+            await model.load(reset: true)
+        } catch {
+            model.error = AlertMessage("No se pudo activar", message: "Revisa tu perfil e inténtalo de nuevo.")
+        }
     }
 
     // MARK: - Acciones
@@ -229,18 +282,33 @@ struct DeckView: View {
     private func actions(_ model: DeckViewModel) -> some View {
         GlassEffectContainer(spacing: 18) {
             HStack(spacing: 16) {
-                GlassCircleButton(systemImage: "arrow.uturn.backward", tint: .lazyYellow, size: 50, isEnabled: model.canRewind,
-                                  accessibilityLabel: "Deshacer") {
+                actionButton("arrow.uturn.backward", tint: .yellow, size: 50,
+                             label: "Deshacer", isEnabled: model.canRewind) {
                     if store.isPremium { Task { await model.rewind() } } else { paywallReason = .rewind }
                 }
-                GlassCircleButton(systemImage: "xmark", tint: .lazyRed, size: 66, accessibilityLabel: "No me interesa") { command = .pass }
-                GlassCircleButton(systemImage: "star.fill", tint: .lazyCyan, size: 50, accessibilityLabel: "Superlike") {
+                actionButton("xmark", tint: .red, size: 66, label: "No me interesa") { command = .pass }
+                actionButton("star.fill", tint: .cyan, size: 50, label: "Superlike") {
                     if store.isPremium { command = .superlike } else { paywallReason = .superlike }
                 }
-                GlassCircleButton(systemImage: "heart.fill", tint: .lazyMint, size: 66, accessibilityLabel: "Me gusta") { command = .like }
+                actionButton("heart.fill", tint: .green, size: 66, label: "Me gusta") { command = .like }
             }
         }
         .frame(maxWidth: .infinity)
+        .padding(.bottom, 8)
+    }
+
+    private func actionButton(_ symbol: String, tint: Color, size: CGFloat, label: String,
+                              isEnabled: Bool = true, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: size * 0.38, weight: .semibold))
+                .frame(width: size, height: size)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .tint(tint)
+        .disabled(!isEnabled)
+        .accessibilityLabel(label)
     }
 
     @ViewBuilder
@@ -249,7 +317,7 @@ struct DeckView: View {
             MatchCelebrationView(match: match, myPhoto: account.firstPhotoURL, myName: account.displayName,
                                  onMessage: { model.dismissMatch(); chatMatch = match },
                                  onKeepSwiping: { model.dismissMatch() })
-                .transition(.opacity.combined(with: .scale(scale: 1.05)))
+                .transition(.opacity)
         }
     }
 }

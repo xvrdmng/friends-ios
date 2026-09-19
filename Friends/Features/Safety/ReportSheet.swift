@@ -40,53 +40,52 @@ struct ReportSheet: View {
     @State private var note = ""
     @State private var alsoBlock = true
     @State private var isSending = false
-    @State private var errorMessage: String?
+    @State private var error: AlertMessage?
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                DoodleBackground()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        Text("Reportar a \(target.displayName)")
-                            .font(.lazyHeading).foregroundStyle(Color.lazyBlack)
-                        Text("Revisamos cada reporte en menos de 24 horas. La otra persona no sabrá que fuiste tú.")
-                            .font(.lazyCaption).foregroundStyle(.secondary)
-
-                        ChipFlow {
-                            ForEach(ReportReason.allCases) { item in
-                                ChoiceChip(label: item.label, selectedColor: .lazyYellow, isSelected: reason == item) { reason = item }
+            Form {
+                Section {
+                    ForEach(ReportReason.allCases) { item in
+                        Button { reason = item } label: {
+                            LabeledContent {
+                                if reason == item {
+                                    Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
+                                }
+                            } label: {
+                                Text(item.label).foregroundStyle(Color.primary)
                             }
                         }
-
-                        TextField("Cuéntanos más (opcional)", text: $note, axis: .vertical)
-                            .font(.lazyBody).lineLimit(3...6)
-                            .padding(14).lazyCard(cornerRadius: 14).stickerPadding()
-
-                        if target.userID != nil {
-                            Toggle(isOn: $alsoBlock) {
-                                Text("Bloquear también a \(target.displayName)").font(.lazySubhead)
-                            }
-                            .tint(Color.lazyRose)
-                            .foregroundStyle(Color.lazyBlack)
-                        }
-
-                        if let errorMessage {
-                            Text(errorMessage).font(.lazyCaption)
-                                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                                .lazyCard(backgroundColor: .lazyNotice, cornerRadius: 12, offset: 3).stickerPadding()
-                        }
-
-                        Button("Enviar reporte") { Task { await send() } }
-                            .buttonStyle(LazyButtonStyle(background: .lazyRose, foreground: .lazyBlack, fillsWidth: true))
-                            .disabled(reason == nil || isSending)
-                            .opacity(reason == nil ? 0.5 : 1)
-                            .stickerPadding()
+                        .accessibilityAddTraits(reason == item ? [.isSelected] : [])
                     }
-                    .padding(22)
+                } header: {
+                    Text("Motivo")
+                } footer: {
+                    Text("Revisamos cada reporte en menos de 24 horas. La otra persona no sabrá que fuiste tú.")
+                }
+
+                Section("Cuéntanos más (opcional)") {
+                    TextField("Detalles", text: $note, axis: .vertical)
+                        .lineLimit(3...6)
+                }
+
+                if target.userID != nil {
+                    Section {
+                        Toggle("Bloquear también a \(target.displayName)", isOn: $alsoBlock)
+                    }
                 }
             }
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } } }
+            .navigationTitle("Reportar a \(target.displayName)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Enviar") { Task { await send() } }
+                        .disabled(reason == nil || isSending)
+                }
+            }
+            .errorAlert($error)
+            .disabled(isSending)
         }
     }
 
@@ -103,12 +102,13 @@ struct ReportSheet: View {
             onFinished(block)
             dismiss()
         } catch {
-            errorMessage = "No se pudo enviar el reporte. Inténtalo de nuevo."
+            self.error = AlertMessage("No se pudo enviar el reporte", message: "Inténtalo de nuevo.")
         }
     }
 }
 
-/// Bloquear a una persona. Desaparece de mazos, grupos y chat, y sus matches se deshacen.
+/// Bloquear a una persona. Desaparece de mazos, grupos y chat, y sus matches se
+/// deshacen.
 enum SafetyActions {
     static func block(userID: String, api: any APIService = APIClient.shared) async -> Bool {
         do { try await api.send(.block, body: BlockRequest(userId: userID)); return true }
@@ -121,36 +121,40 @@ struct BlockedUsersView: View {
     var api: any APIService = APIClient.shared
     @State private var people: [Person] = []
     @State private var isLoading = true
-    @State private var toast: Toast?
+    @State private var error: AlertMessage?
 
     var body: some View {
-        ZStack {
-            DoodleBackground()
-            ScrollView {
-                VStack(spacing: 14) {
-                    if isLoading { ProgressView().padding(.top, 40) }
-                    else if people.isEmpty {
-                        StateCard(emoji: "🕊️", title: "No has bloqueado a nadie").padding(.top, 20)
-                    } else {
-                        ForEach(people) { person in
-                            HStack(spacing: 14) {
-                                AvatarView(url: person.thumbUrl, name: person.displayName)
-                                Text(person.displayName).font(.lazySubhead)
-                                Spacer()
-                                Button("Desbloquear") { Task { await unblock(person) } }
-                                    .buttonStyle(LazyButtonStyle(background: .white, foreground: .lazyBlack))
-                                    .scaleEffect(0.75)
+        Group {
+            if isLoading {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if people.isEmpty {
+                ContentUnavailableView {
+                    Label("No has bloqueado a nadie", systemImage: "hand.raised")
+                } description: {
+                    Text("Quien bloquees dejará de verte y de escribirte.")
+                }
+            } else {
+                List {
+                    ForEach(people) { person in
+                        HStack(spacing: 12) {
+                            AvatarView(url: person.thumbUrl, name: person.displayName, size: 44)
+                            Text(person.displayName).font(.headline)
+                            Spacer()
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button("Desbloquear", systemImage: "hand.raised.slash") {
+                                Task { await unblock(person) }
                             }
-                            .foregroundStyle(Color.lazyBlack)
-                            .padding(12).lazyCard().stickerPadding()
+                            .tint(Color.accentColor)
                         }
                     }
                 }
-                .padding(22)
+                .listStyle(.insetGrouped)
             }
         }
         .navigationTitle("Bloqueados")
-        .toast($toast)
+        .navigationBarTitleDisplayMode(.inline)
+        .errorAlert($error)
         .task { await load() }
     }
 
@@ -163,9 +167,8 @@ struct BlockedUsersView: View {
         do {
             try await api.send(.unblock(userID: person.userId))
             people.removeAll { $0.id == person.id }
-            toast = Toast(text: "\(person.displayName) desbloqueado")
         } catch {
-            toast = Toast(text: "No se pudo desbloquear", isError: true)
+            self.error = AlertMessage("No se pudo desbloquear")
         }
     }
 }

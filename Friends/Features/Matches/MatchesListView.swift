@@ -40,17 +40,10 @@ struct MatchesListView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        ZStack {
-            DoodleBackground()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("CHATS").font(.lazyTitle).foregroundStyle(Color.lazyBlack).padding(.top, 8)
-                    content
-                }
-                .padding(.horizontal, 22).padding(.trailing, 4).padding(.bottom, 110)
-            }
-            .drivesTabBar()
-            .refreshable { await model.load() }
+        NavigationStack {
+            content
+                .navigationTitle("Chats")
+                .refreshable { await model.load() }
         }
         .task { await model.load(); await account.refresh() }
         .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await model.load() } } }
@@ -68,79 +61,112 @@ struct MatchesListView: View {
     private var content: some View {
         switch model.phase {
         case .loading:
-            ProgressView().frame(maxWidth: .infinity).padding(.top, 60)
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+
         case .failed:
-            StateCard(emoji: "📡", title: "No se pudieron cargar tus chats", message: "Revisa tu conexión.",
-                      actionTitle: "Reintentar") { Task { await model.load() } }
-        case .ready where model.matches.isEmpty:
-            StateCard(emoji: "💬", title: "Aún no tienes matches",
-                      message: "Cuando a alguien le guste que te guste, aparecerá aquí.", color: .lazyYellow)
-        case .ready:
-            if !model.newMatches.isEmpty { newMatchesRow }
-            if !model.conversations.isEmpty {
-                Text("MENSAJES").font(.lazyMono).foregroundStyle(.secondary)
-                ForEach(model.conversations) { match in row(match) }
+            ContentUnavailableView {
+                Label("No se pudieron cargar tus chats", systemImage: "wifi.exclamationmark")
+            } description: {
+                Text("Revisa tu conexión.")
+            } actions: {
+                Button("Reintentar") { Task { await model.load() } }
+                    .buttonStyle(.glassProminent)
             }
+
+        case .ready where model.matches.isEmpty:
+            ContentUnavailableView {
+                Label("Aún no tienes matches", systemImage: "bubble.left.and.bubble.right")
+            } description: {
+                Text("Cuando a alguien le guste que te guste, aparecerá aquí.")
+            }
+
+        case .ready:
+            List {
+                if !model.newMatches.isEmpty {
+                    Section("Nuevos matches") { newMatchesRow }
+                }
+                if !model.conversations.isEmpty {
+                    Section("Mensajes") {
+                        ForEach(model.conversations) { match in row(match) }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
         }
     }
 
     private var newMatchesRow: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("NUEVOS MATCHES").font(.lazyMono).foregroundStyle(.secondary)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 14) {
-                    ForEach(model.newMatches) { match in
-                        Button { open = match } label: {
-                            VStack(spacing: 6) {
-                                AvatarView(url: match.other.thumbUrl, name: match.other.displayName, size: 68)
-                                Text(match.other.displayName).font(.lazyCaption).lineLimit(1)
-                            }
-                            .frame(width: 80)
+        ScrollView(.horizontal) {
+            HStack(spacing: 14) {
+                ForEach(model.newMatches) { match in
+                    Button { open = match } label: {
+                        VStack(spacing: 6) {
+                            AvatarView(url: match.other.thumbUrl, name: match.other.displayName, size: 64)
+                            Text(match.other.displayName)
+                                .font(.caption)
+                                .lineLimit(1)
                         }
-                        .buttonStyle(.plain).foregroundStyle(Color.lazyBlack)
-                        .accessibilityLabel("Nuevo match con \(match.other.displayName)")
+                        .frame(width: 76)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Nuevo match con \(match.other.displayName)")
                 }
-                .padding(.vertical, 4).padding(.trailing, 6)
             }
+            .padding(.vertical, 4)
         }
+        .scrollIndicators(.hidden)
+        .listRowInsets(.init(top: 8, leading: 16, bottom: 8, trailing: 0))
     }
 
     private func row(_ match: Match) -> some View {
         Button { open = match } label: {
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 AvatarView(url: match.other.thumbUrl, name: match.other.displayName)
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack {
-                        Text(match.other.displayName).font(.lazySubhead).lineLimit(1)
-                        if let group = match.group { Tag(text: group.name, color: .lazyMint) }
+                    HStack(spacing: 6) {
+                        Text(match.other.displayName)
+                            .font(.headline)
+                            .lineLimit(1)
+                        if let group = match.group {
+                            Tag(text: group.name, tint: Color.accentColor)
+                        }
                     }
-                    Text(preview(match.lastMessage)).font(.lazyCaption)
-                        .foregroundStyle(match.unreadCount > 0 ? Color.lazyBlack : .secondary)
-                        .fontWeight(match.unreadCount > 0 ? .bold : .regular).lineLimit(1)
+                    Text(preview(match.lastMessage))
+                        .font(.subheadline)
+                        .foregroundStyle(match.unreadCount > 0 ? Color.primary : .secondary)
+                        .lineLimit(1)
                 }
                 Spacer(minLength: 6)
                 VStack(alignment: .trailing, spacing: 6) {
                     if let date = match.lastMessage?.createdAt {
                         Text(date.formatted(.relative(presentation: .numeric, unitsStyle: .abbreviated)))
-                            .font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundStyle(.secondary)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
                     if match.unreadCount > 0 {
-                        Text("\(match.unreadCount)").font(.system(size: 13, weight: .black))
-                            .padding(.horizontal, 8).padding(.vertical, 3)
-                            .background(Color.lazyRose, in: Capsule()).overlay(Capsule().stroke(Color.lazyBlack, lineWidth: 2))
+                        Text(match.unreadCount.formatted())
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(Color.accentColor, in: .capsule)
                     }
                 }
             }
-            .foregroundStyle(Color.lazyBlack)
-            .padding(12).lazyCard().stickerPadding()
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel(for: match))
+    }
+
+    private func accessibilityLabel(for match: Match) -> String {
+        var parts = [match.other.displayName]
+        if match.unreadCount > 0 { parts.append("\(match.unreadCount) sin leer") }
+        parts.append(preview(match.lastMessage))
+        return parts.filter { !$0.isEmpty }.joined(separator: ", ")
     }
 
     private func preview(_ message: ChatMessage?) -> String {
         guard let message else { return "" }
-        let text = message.kind == "image" ? "📷 Foto" : (message.body ?? "")
+        let text = message.kind == "image" ? "Foto" : (message.body ?? "")
         return message.mine ? "Tú: \(text)" : text
     }
 }

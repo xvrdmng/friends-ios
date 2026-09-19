@@ -18,30 +18,32 @@ struct ProfileView: View {
     @State private var confirmDelete = false
     @State private var isDeleting = false
     @State private var exportURL: URL?
-    @State private var toast: Toast?
+    @State private var error: AlertMessage?
 
     private var profile: MeResponse.Profile? { account.me?.profile ?? session.me?.profile }
     private var photos: [PhotoItem] { account.me?.photos ?? [] }
 
     var body: some View {
-        ZStack {
-            DoodleBackground()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    header
-                    photoStrip
-                    premiumCard
-                    likesCard
-                    aboutCard
-                    settingsSection
-                    accountSection
-                }
-                .padding(.horizontal, 22).padding(.trailing, 4).padding(.bottom, 110)
+        NavigationStack {
+            List {
+                Section { header }
+                Section("Fotos") { photoStrip }
+                premiumSection
+                likesSection
+                aboutSection
+                settingsSection
+                accountSection
             }
-            .drivesTabBar()
+            .listStyle(.insetGrouped)
+            .navigationTitle("Perfil")
             .refreshable { await reload() }
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Editar") { showEdit = true }
+                }
+            }
         }
-        .toast($toast)
+        .errorAlert($error)
         .task { await reload() }
         .sheet(isPresented: $showEdit) { EditProfileView { Task { await reload() } } }
         .sheet(isPresented: $showPhotos) { PhotosManagerView { Task { await reload() } } }
@@ -50,9 +52,7 @@ struct ProfileView: View {
         .sheet(isPresented: $showPreview) { ProfilePreviewView(me: account.me) }
         .sheet(isPresented: $showBlocked) { NavigationStack { BlockedUsersView() } }
         .sheet(item: $exportURL) { url in ShareSheet(url: url) }
-        .sheet(isPresented: Binding(get: { paywallReason != nil }, set: { if !$0 { paywallReason = nil } })) {
-            PaywallView(reason: paywallReason ?? .generic)
-        }
+        .sheet(item: $paywallReason) { reason in PaywallView(reason: reason) }
         .confirmationDialog("¿Cerrar sesión?", isPresented: $confirmSignOut, titleVisibility: .visible) {
             Button("Cerrar sesión", role: .destructive) { Task { await session.signOut() } }
             Button("Cancelar", role: .cancel) {}
@@ -71,24 +71,20 @@ struct ProfileView: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            Button { showPhotos = true } label: {
-                AvatarView(url: account.firstPhotoURL, name: account.displayName, size: 82)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Cambiar fotos")
-
-            VStack(alignment: .leading, spacing: 6) {
+            AvatarView(url: account.firstPhotoURL, name: account.displayName, size: 72)
+            VStack(alignment: .leading, spacing: 4) {
                 Text(profile?.displayName ?? account.displayName)
-                    .font(.lazyHeading).lineLimit(1).minimumScaleFactor(0.6)
-                HStack(spacing: 8) {
-                    if let age = profile?.age { Tag(text: "\(age)") }
-                    if let city = profile?.city, !city.isEmpty { Tag(text: city, color: .lazyMint) }
+                    .font(.title2.weight(.semibold))
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    if let age = profile?.age { Tag(text: "\(age) años") }
+                    if let city = profile?.city, !city.isEmpty { Tag(text: city) }
                 }
             }
             Spacer(minLength: 0)
         }
-        .foregroundStyle(Color.lazyBlack)
-        .padding(.top, 8)
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
     }
 
     private var photoStrip: some View {
@@ -96,127 +92,122 @@ struct ProfileView: View {
             HStack(spacing: 10) {
                 ForEach(photos.prefix(4)) { photo in
                     RemoteImage(url: photo.thumbURL)
-                        .frame(width: 64, height: 80).clipped()
-                        .lazyCard(cornerRadius: 12, offset: 2).padding(.trailing, 2).padding(.bottom, 2)
+                        .frame(width: 60, height: 76)
+                        .clipShape(.rect(cornerRadius: 10, style: .continuous))
                         .opacity(photo.isApproved ? 1 : 0.5)
                 }
                 VStack(spacing: 4) {
-                    Image(systemName: "photo.badge.plus").font(.system(size: 18, weight: .bold))
-                    Text("\(photos.count)/6").font(.lazyMono)
+                    Image(systemName: "photo.badge.plus").font(.title3)
+                    Text("\(photos.count)/6").font(.caption)
                 }
-                .foregroundStyle(Color.lazyBlack)
-                .frame(width: 64, height: 80)
-                .lazyCard(backgroundColor: .lazyRose, cornerRadius: 12, offset: 2)
-                .padding(.trailing, 2).padding(.bottom, 2)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 60, height: 76)
+                .background(Color(.secondarySystemFill), in: .rect(cornerRadius: 10, style: .continuous))
                 Spacer(minLength: 0)
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Gestionar fotos")
+        .accessibilityLabel("Gestionar fotos, \(photos.count) de 6")
     }
 
-    // MARK: - Tarjetas
+    // MARK: - Secciones
 
     @ViewBuilder
-    private var premiumCard: some View {
-        if store.isPremium {
-            HStack(spacing: 12) {
-                Text("★").font(.lazyHeading)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Friends Premium").font(.lazySubhead)
+    private var premiumSection: some View {
+        Section {
+            if store.isPremium {
+                LabeledContent {
                     if let until = store.premiumUntil {
-                        Text("Hasta el \(until.formatted(.dateTime.day().month().year()))")
-                            .font(.lazyCaption).foregroundStyle(.secondary)
+                        Text(until.formatted(.dateTime.day().month().year()))
+                    }
+                } label: {
+                    Label("Friends Premium", systemImage: "star.fill")
+                        .foregroundStyle(.yellow)
+                }
+            } else {
+                Button { paywallReason = .generic } label: {
+                    LabeledContent {
+                        Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)
+                    } label: {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Hazte premium")
+                                Text("Likes sin límite, ver quién te quiere y más.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "star.fill").foregroundStyle(.yellow)
+                        }
                     }
                 }
-                Spacer()
+                .buttonStyle(.plain)
             }
-            .foregroundStyle(Color.lazyBlack)
-            .padding(16).lazyCard(backgroundColor: .lazyYellow).stickerPadding()
-        } else {
-            Button { paywallReason = .generic } label: {
-                HStack(spacing: 12) {
-                    Text("★").font(.lazyHeading)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Hazte premium").font(.lazySubhead)
-                        Text("Likes sin límite, ver quién te quiere y más.")
-                            .font(.lazyCaption).foregroundStyle(.secondary).multilineTextAlignment(.leading)
-                    }
-                    Spacer(minLength: 4)
-                    Image(systemName: "chevron.right").font(.system(size: 15, weight: .black))
-                }
-                .foregroundStyle(Color.lazyBlack)
-                .padding(16).lazyCard(backgroundColor: .lazyYellow).stickerPadding()
-            }
-            .buttonStyle(.plain)
         }
     }
 
     @ViewBuilder
-    private var likesCard: some View {
+    private var likesSection: some View {
         if let likes = likesReceived, likes.count > 0 {
-            Button {
-                if !likes.premium { paywallReason = .likesReceived }
-            } label: {
-                HStack(spacing: 12) {
-                    Text("💘").font(.lazyHeading)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(likes.count) \(likes.count == 1 ? "persona" : "personas") te dieron like")
-                            .font(.lazySubhead).multilineTextAlignment(.leading)
+            Section {
+                Button {
+                    if !likes.premium { paywallReason = .likesReceived }
+                } label: {
+                    LabeledContent {
                         if !likes.premium {
-                            Text("Con premium ves quiénes son.").font(.lazyCaption).foregroundStyle(.secondary)
+                            Image(systemName: "lock.fill").font(.footnote).foregroundStyle(.tertiary)
                         }
-                    }
-                    Spacer(minLength: 4)
-                    if !likes.premium { Image(systemName: "lock.fill").font(.system(size: 15, weight: .black)) }
-                }
-                .foregroundStyle(Color.lazyBlack)
-                .padding(16).lazyCard(backgroundColor: .lazyRose).stickerPadding()
-            }
-            .buttonStyle(.plain)
-            .disabled(likes.premium)
-
-            if likes.premium, let people = likes.people, !people.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 14) {
-                        ForEach(people) { person in
-                            VStack(spacing: 6) {
-                                AvatarView(url: person.thumbUrl, name: person.displayName, size: 64)
-                                Text(person.displayName).font(.lazyCaption).lineLimit(1)
+                    } label: {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(likes.count) \(likes.count == 1 ? "persona" : "personas") te dieron like")
+                                if !likes.premium {
+                                    Text("Con premium ves quiénes son.")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
-                            .frame(width: 76).foregroundStyle(Color.lazyBlack)
+                        } icon: {
+                            Image(systemName: "heart.fill").foregroundStyle(.pink)
                         }
                     }
-                    .padding(.vertical, 4).padding(.trailing, 6)
+                }
+                .buttonStyle(.plain)
+                .disabled(likes.premium)
+
+                if likes.premium, let people = likes.people, !people.isEmpty {
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 14) {
+                            ForEach(people) { person in
+                                VStack(spacing: 6) {
+                                    AvatarView(url: person.thumbUrl, name: person.displayName, size: 60)
+                                    Text(person.displayName).font(.caption).lineLimit(1)
+                                }
+                                .frame(width: 72)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .scrollIndicators(.hidden)
                 }
             }
         }
     }
 
-    private var aboutCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("SOBRE TI").font(.lazyMono).foregroundStyle(.secondary)
-                Spacer()
-                Button("Editar") { showEdit = true }
-                    .font(.lazyMono).foregroundStyle(Color.lazyBlack)
-            }
+    private var aboutSection: some View {
+        Section("Sobre ti") {
             if let bio = profile?.bio, !bio.isEmpty {
-                Text(bio).font(.lazyBody).foregroundStyle(Color.lazyBlack)
+                Text(bio)
             } else {
                 Text("Todavía no has escrito nada sobre ti.")
-                    .font(.lazyCaption).foregroundStyle(.secondary)
+                    .foregroundStyle(.secondary)
             }
-            ChipFlow(spacing: 8) {
-                ForEach(traits, id: \.self) { trait in
-                    Text(trait).font(.lazyCaption).foregroundStyle(Color.lazyBlack)
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .lazyCard(cornerRadius: 14, offset: 2).padding(.trailing, 2).padding(.bottom, 2)
+            if !traits.isEmpty {
+                ChipFlow {
+                    ForEach(traits, id: \.self) { Tag(text: $0) }
                 }
             }
         }
-        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-        .lazyCard().stickerPadding()
     }
 
     private var traits: [String] {
@@ -232,42 +223,22 @@ struct ProfileView: View {
         ].compactMap { $0 }.filter { !$0.isEmpty }
     }
 
-    // MARK: - Ajustes y cuenta
-
     private var settingsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("AJUSTES").font(.lazyMono).foregroundStyle(.secondary)
-            row("Ver cómo te ven", "eye") { showPreview = true }
-            row("Filtros de búsqueda", "slider.horizontal.3") { showFilters = true }
-            row("Tus idiomas", "globe") { showLanguages = true }
-            row("Cuentas bloqueadas", "hand.raised") { showBlocked = true }
+        Section("Ajustes") {
+            Button("Ver cómo te ven", systemImage: "eye") { showPreview = true }
+            Button("Filtros de búsqueda", systemImage: "line.3.horizontal.decrease") { showFilters = true }
+            Button("Tus idiomas", systemImage: "character.bubble") { showLanguages = true }
+            Button("Cuentas bloqueadas", systemImage: "hand.raised") { showBlocked = true }
         }
     }
 
     private var accountSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("CUENTA").font(.lazyMono).foregroundStyle(.secondary)
-            row("Descargar mis datos", "square.and.arrow.down") { Task { await export() } }
-            row("Cerrar sesión", "rectangle.portrait.and.arrow.right") { confirmSignOut = true }
-            row("Borrar mi cuenta", "trash", tint: .lazyRed) { confirmDelete = true }
+        Section("Cuenta") {
+            Button("Descargar mis datos", systemImage: "square.and.arrow.down") { Task { await export() } }
+            Button("Cerrar sesión", systemImage: "rectangle.portrait.and.arrow.right") { confirmSignOut = true }
+            Button("Borrar mi cuenta", systemImage: "trash", role: .destructive) { confirmDelete = true }
                 .disabled(isDeleting)
         }
-    }
-
-    private func row(_ title: String, _ icon: String, tint: Color = .lazyBlack,
-                     action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 14) {
-                Image(systemName: icon).font(.system(size: 17, weight: .bold)).frame(width: 26)
-                Text(title).font(.lazySubhead)
-                Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 14, weight: .black)).foregroundStyle(.secondary)
-            }
-            .foregroundStyle(tint)
-            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-            .lazyCard().stickerPadding()
-        }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Datos
@@ -285,7 +256,7 @@ struct ProfileView: View {
             try data.write(to: url, options: .atomic)
             exportURL = url
         } catch {
-            toast = Toast(text: "No se pudieron descargar tus datos", isError: true)
+            self.error = AlertMessage("No se pudieron descargar tus datos")
         }
     }
 
@@ -296,7 +267,7 @@ struct ProfileView: View {
             try await APIClient.shared.send(.deleteMe)
             await session.signOut()
         } catch {
-            toast = Toast(text: "No se pudo borrar la cuenta", isError: true)
+            self.error = AlertMessage("No se pudo borrar la cuenta")
         }
     }
 }

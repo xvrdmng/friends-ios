@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// La carta de perfil: foto a pantalla completa con paginador, y el nombre abajo.
-/// Tocar el tercio izquierdo/derecho cambia de foto.
+/// La carta de perfil: foto a pantalla completa con paginador y el nombre
+/// abajo. Tocar el tercio izquierdo/derecho cambia de foto.
 struct ProfileCardView: View {
     let card: DeckCard
     var likeOpacity: Double = 0
@@ -17,7 +17,7 @@ struct ProfileCardView: View {
             ZStack(alignment: .bottom) {
                 photoLayer(size: geo.size)
 
-                LinearGradient(colors: [.clear, .black.opacity(0.72)], startPoint: .center, endPoint: .bottom)
+                LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .center, endPoint: .bottom)
                     .allowsHitTesting(false)
 
                 info
@@ -27,7 +27,7 @@ struct ProfileCardView: View {
             .overlay(alignment: .top) { pager }
             .overlay { stamps }
             .overlay(alignment: .topTrailing) { verifiedBadge }
-            .contentShape(Rectangle())
+            .contentShape(.rect)
             .gesture(SpatialTapGesture().onEnded { tap in
                 guard photos.count > 1 else { return }
                 withAnimation(.snappy(duration: 0.15)) {
@@ -36,12 +36,18 @@ struct ProfileCardView: View {
                 }
             })
         }
-        .background(Color.lazyGray)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.lazyBlack, lineWidth: 3))
-        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.lazyBlack).offset(x: 5, y: 5))
+        .background(Color(.secondarySystemBackground))
+        .clipShape(.rect(cornerRadius: 28, style: .continuous))
+        .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(card.displayName), \(card.age.map(String.init) ?? "")")
+        .accessibilityLabel(accessibilityDescription)
+        .accessibilityHint("Desliza a la derecha para dar like, a la izquierda para pasar")
+    }
+
+    private var accessibilityDescription: String {
+        [card.displayName, card.age.map { "\($0) años" }, card.city, Labels.distance(card.distanceKm)]
+            .compactMap { $0 }
+            .joined(separator: ", ")
     }
 
     private func photoLayer(size: CGSize) -> some View {
@@ -53,60 +59,77 @@ struct ProfileCardView: View {
     }
 
     private var pager: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             ForEach(photos.indices, id: \.self) { index in
                 Capsule()
-                    .fill(index == photoIndex ? Color.white : Color.white.opacity(0.4))
-                    .frame(height: 4)
+                    .fill(index == photoIndex ? .white : Color.white.opacity(0.4))
+                    .frame(height: 3)
             }
         }
         .padding(.horizontal, 14).padding(.top, 12)
         .opacity(photos.count > 1 ? 1 : 0)
+        .accessibilityHidden(true)
     }
 
     private var info: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(card.displayName).font(.system(size: 34, weight: .black))
-                if let age = card.age { Text("\(age)").font(.system(size: 28, weight: .bold)) }
+                Text(card.displayName)
+                    .font(.largeTitle.weight(.bold))
+                if let age = card.age {
+                    Text(age.formatted())
+                        .font(.title2)
+                }
                 Spacer()
                 Button(action: onInfo) {
-                    Image(systemName: "info.circle.fill").font(.system(size: 28))
+                    Image(systemName: "info.circle.fill")
+                        .font(.title)
+                        .symbolRenderingMode(.hierarchical)
                 }
-                .accessibilityLabel("Ver perfil completo")
+                .buttonStyle(.plain)
+                .accessibilityLabel("Ver perfil completo de \(card.displayName)")
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 if let city = card.city { Label(city, systemImage: "mappin.and.ellipse") }
                 if let distance = Labels.distance(card.distanceKm) { Text("· \(distance)") }
             }
-            .font(.lazyCaption)
+            .font(.subheadline)
 
             if !card.languages.isEmpty { languageLine }
             else if !card.interests.isEmpty { interestLine }
         }
         .foregroundStyle(.white)
+        // El texto cae sobre una foto arbitraria: la sombra es lo que garantiza
+        // que se lea sobre una zona clara.
         .shadow(color: .black.opacity(0.5), radius: 4, y: 1)
     }
 
     private var languageLine: some View {
         let native = card.languages.filter { $0.kind == "native" }.map(\.name).joined(separator: ", ")
-        let learning = card.languages.filter { $0.kind == "learning" }.map { "\($0.name)\($0.level.map { " (\($0.uppercased()))" } ?? "")" }.joined(separator: ", ")
+        let learning = card.languages.filter { $0.kind == "learning" }
+            .map { "\($0.name)\($0.level.map { " (\($0.uppercased()))" } ?? "")" }
+            .joined(separator: ", ")
         return VStack(alignment: .leading, spacing: 2) {
-            if !native.isEmpty { Text("🗣️ Habla \(native)") }
-            if !learning.isEmpty { Text("📖 Aprende \(learning)") }
+            if !native.isEmpty { Label("Habla \(native)", systemImage: "quote.bubble") }
+            if !learning.isEmpty { Label("Aprende \(learning)", systemImage: "book") }
         }
-        .font(.lazyCaption)
+        .font(.subheadline)
     }
 
     private var interestLine: some View {
         HStack(spacing: 6) {
             ForEach(card.interests.prefix(3)) { interest in
                 Text("\(interest.emoji ?? "") \(interest.name)")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.caption)
                     .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(interest.shared ? Color.lazyMint : Color.white.opacity(0.25), in: Capsule())
-                    .foregroundStyle(interest.shared ? Color.lazyBlack : .white)
+                    .background(.ultraThinMaterial, in: .capsule)
+                    .overlay(
+                        Capsule().strokeBorder(
+                            interest.shared ? Color.accentColor : .clear,
+                            lineWidth: 1
+                        )
+                    )
             }
         }
     }
@@ -115,28 +138,35 @@ struct ProfileCardView: View {
     private var verifiedBadge: some View {
         if card.verified {
             Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 26)).foregroundStyle(Color.lazyCyan)
+                .font(.title2)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, Color.accentColor)
                 .padding(.top, 26).padding(.trailing, 16)
+                .accessibilityLabel("Perfil verificado")
         }
     }
 
     private var stamps: some View {
         ZStack {
-            stamp("LIKE", color: .lazyMint, rotation: -14).opacity(likeOpacity)
+            stamp("LIKE", tint: .green, rotation: -14).opacity(likeOpacity)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(28)
-            stamp("NOPE", color: .lazyRed, rotation: 14).opacity(nopeOpacity)
+            stamp("NOPE", tint: .red, rotation: 14).opacity(nopeOpacity)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing).padding(28)
         }
         .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
-    private func stamp(_ text: String, color: Color, rotation: Double) -> some View {
+    private func stamp(_ text: String, tint: Color, rotation: Double) -> some View {
         Text(text)
-            .font(.system(size: 38, weight: .black))
-            .foregroundStyle(color == .lazyRed ? .white : Color.lazyBlack)
+            .font(.largeTitle.weight(.heavy))
+            .foregroundStyle(tint)
             .padding(.horizontal, 14).padding(.vertical, 4)
-            .background(color, in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.lazyBlack, lineWidth: 4))
+            .background(.ultraThinMaterial, in: .rect(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(tint, lineWidth: 3)
+            )
             .rotationEffect(.degrees(rotation))
     }
 }
@@ -144,13 +174,15 @@ struct ProfileCardView: View {
 /// Envuelve una carta con el gesto de arrastre. Al soltar decide con `SwipeMath`.
 struct DraggableCard: View {
     let card: DeckCard
-    /// Los botones piden la decision por aqui, para que la carta vuele igual que con el dedo.
+    /// Los botones piden la decision por aqui, para que la carta vuele igual
+    /// que con el dedo.
     @Binding var command: DeckViewModel.Decision?
     let onDecision: (DeckViewModel.Decision) -> Void
     let onInfo: () -> Void
 
     @State private var offset: CGSize = .zero
     @State private var isFlying = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ProfileCardView(
@@ -174,6 +206,13 @@ struct DraggableCard: View {
                 }
         )
         .sensoryFeedback(.impact(weight: .medium), trigger: isFlying)
+        // Con VoiceOver no hay gesto de arrastre util: las mismas decisiones se
+        // ofrecen como acciones del rotor.
+        .accessibilityActions {
+            Button("Me gusta") { fly(.like, toward: CGSize(width: 700, height: -40)) }
+            Button("No me interesa") { fly(.pass, toward: CGSize(width: -700, height: -40)) }
+            Button("Ver perfil completo", action: onInfo)
+        }
         .onChange(of: command) { _, requested in
             guard let requested, !isFlying else { return }
             command = nil
@@ -187,6 +226,12 @@ struct DraggableCard: View {
 
     private func fly(_ decision: DeckViewModel.Decision, toward target: CGSize) {
         isFlying = true
+        // Con Reducir movimiento la carta se desvanece en vez de salir volando.
+        if reduceMotion {
+            withAnimation(.easeOut(duration: 0.15)) { offset = .zero }
+            onDecision(decision)
+            return
+        }
         withAnimation(.easeIn(duration: 0.22)) { offset = target }
         Task {
             try? await Task.sleep(for: .milliseconds(200))

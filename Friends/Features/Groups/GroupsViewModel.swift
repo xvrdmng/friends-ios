@@ -12,7 +12,7 @@ final class GroupsViewModel {
     private(set) var phase: Phase = .loading
     var category: String? { didSet { if category != oldValue { reloadDiscover() } } }
     var query = "" { didSet { if query != oldValue { reloadDiscover(debounced: true) } } }
-    var toast: Toast?
+    var error: AlertMessage?
 
     private let api: any APIService
     private var searchTask: Task<Void, Never>?
@@ -65,7 +65,7 @@ final class GroupDetailViewModel {
     private(set) var group: FriendGroup
     private(set) var members: [Person] = []
     private(set) var isWorking = false
-    var toast: Toast?
+    var error: AlertMessage?
 
     private let api: any APIService
 
@@ -88,16 +88,16 @@ final class GroupDetailViewModel {
         do {
             let response: JoinResponse = try await api.send(.join(slug: group.slug), body: JoinRequest(inviteCode: inviteCode))
             guard response.joined else {
-                toast = Toast(text: "No se pudo unir", isError: true)
+                self.error = AlertMessage("No se pudo unir al grupo")
                 return nil
             }
             await load()
             return group
         } catch APIError.server(_, let message) {
-            toast = Toast(text: message, isError: true)
+            self.error = AlertMessage("No se pudo unir al grupo", message: message)
             return nil
         } catch {
-            toast = Toast(text: "No se pudo unir", isError: true)
+            self.error = AlertMessage("No se pudo unir al grupo")
             return nil
         }
     }
@@ -109,7 +109,7 @@ final class GroupDetailViewModel {
             try await api.send(.leave(slug: group.slug))
             return true
         } catch {
-            toast = Toast(text: "No se pudo salir del grupo", isError: true)
+            self.error = AlertMessage("No se pudo salir del grupo")
             return false
         }
     }
@@ -118,9 +118,8 @@ final class GroupDetailViewModel {
         do {
             try await api.send(.kick(slug: group.slug, userID: person.userId))
             members.removeAll { $0.id == person.id }
-            toast = Toast(text: "\(person.displayName) fuera del grupo")
         } catch {
-            toast = Toast(text: "No se pudo expulsar", isError: true)
+            self.error = AlertMessage("No se pudo expulsar a esta persona")
         }
     }
 }

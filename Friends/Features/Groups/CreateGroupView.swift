@@ -17,7 +17,7 @@ struct CreateGroupView: View {
     @State private var coverItem: PhotosPickerItem?
     @State private var coverData: Data?
     @State private var isSaving = false
-    @State private var toast: Toast?
+    @State private var error: AlertMessage?
 
     private var canSave: Bool {
         name.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3 && !isSaving
@@ -30,35 +30,46 @@ struct CreateGroupView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                DoodleBackground()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 22) {
-                        coverPicker
-                        field("Nombre") {
-                            TextField("Fútbol los domingos", text: $name)
-                                .font(.lazyBody).textInputAutocapitalization(.sentences)
-                        }
-                        field("Descripción") {
-                            TextField("¿De qué va el grupo?", text: $description, axis: .vertical)
-                                .font(.lazyBody).lineLimit(3...6)
-                        }
-                        categorySection
-                        if !categoryInterests.isEmpty { interestsSection }
-                        options
-                    }
-                    .padding(22).padding(.bottom, 20)
+            Form {
+                Section { coverPicker }
+                    .listRowInsets(.init())
+
+                Section {
+                    TextField("Nombre", text: $name)
+                        .textInputAutocapitalization(.sentences)
+                    TextField("¿De qué va el grupo?", text: $description, axis: .vertical)
+                        .lineLimit(3...6)
+                } header: {
+                    Text("Sobre el grupo")
+                } footer: {
+                    Text("El nombre necesita al menos 3 caracteres.")
+                }
+
+                Section("Categoría") { categoryChips }
+
+                if !categoryInterests.isEmpty {
+                    Section("Intereses del grupo") { interestChips }
+                }
+
+                Section {
+                    Toggle("Grupo privado", isOn: $isPrivate)
+                    Toggle("Usar mi ubicación", isOn: $useMyLocation)
+                } footer: {
+                    Text(isPrivate
+                         ? "Solo se entra con código de invitación."
+                         : "Cualquiera puede encontrarlo y unirse.")
                 }
             }
             .navigationTitle("Nuevo grupo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isSaving ? "Creando…" : "Crear") { Task { await create() } }.disabled(!canSave)
+                    Button("Crear") { Task { await create() } }.disabled(!canSave)
                 }
             }
-            .toast($toast)
+            .errorAlert($error)
+            .disabled(isSaving)
         }
         .task { await loadInterests() }
         .onChange(of: coverItem) { _, item in Task { await loadCover(item) } }
@@ -66,93 +77,37 @@ struct CreateGroupView: View {
 
     // MARK: - Campos
 
-    private func field<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title.uppercased()).font(.lazyMono).foregroundStyle(.secondary)
-            content()
-                .foregroundStyle(Color.lazyBlack)
-                .padding(.horizontal, 16).padding(.vertical, 12)
-                .lazyCard().stickerPadding()
-        }
-    }
-
     private var coverPicker: some View {
-        PhotosPicker(selection: $coverItem, matching: .images) {
-            CoverTile(data: coverData)
+        // La etiqueta del picker es un closure Sendable: el estado se lee aqui
+        // fuera, no dentro, o no compila con concurrencia estricta.
+        let data = coverData
+        return PhotosPicker(selection: $coverItem, matching: .images) {
+            CoverTile(data: data)
         }
         .accessibilityLabel("Elegir portada")
     }
 
-    private var categorySection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("CATEGORÍA").font(.lazyMono).foregroundStyle(.secondary)
-            ChipFlow(spacing: 8) {
-                ForEach(Array(Labels.categories.keys).sorted(), id: \.self) { key in
-                    let item = Labels.categories[key]!
-                    ChoiceChip(label: item.name, emoji: item.emoji, selectedColor: .lazyMint,
-                               isSelected: category == key) {
-                        category = key
-                        selectedInterests = []
-                    }
+    private var categoryChips: some View {
+        ChipFlow {
+            ForEach(Array(Labels.categories.keys).sorted(), id: \.self) { key in
+                let item = Labels.categories[key]!
+                ChoiceChip(label: item.name, emoji: item.emoji, isSelected: category == key) {
+                    category = key
+                    selectedInterests = []
                 }
             }
         }
     }
 
-    private var interestsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("INTERESES DEL GRUPO").font(.lazyMono).foregroundStyle(.secondary)
-            ChipFlow(spacing: 8) {
-                ForEach(categoryInterests) { interest in
-                    ChoiceChip(label: interest.name, emoji: interest.emoji,
-                               isSelected: selectedInterests.contains(interest.id)) {
-                        if selectedInterests.contains(interest.id) { selectedInterests.remove(interest.id) }
-                        else { selectedInterests.insert(interest.id) }
-                    }
+    private var interestChips: some View {
+        ChipFlow {
+            ForEach(categoryInterests) { interest in
+                ChoiceChip(label: interest.name, emoji: interest.emoji,
+                           isSelected: selectedInterests.contains(interest.id)) {
+                    if selectedInterests.contains(interest.id) { selectedInterests.remove(interest.id) }
+                    else { selectedInterests.insert(interest.id) }
                 }
             }
-        }
-    }
-
-    private var options: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Toggle(isOn: $isPrivate) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Grupo privado").font(.lazySubhead)
-                    Text("Solo se entra con código de invitación.").font(.lazyCaption).foregroundStyle(.secondary)
-                }
-            }
-            Toggle(isOn: $useMyLocation) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Usar mi ubicación").font(.lazySubhead)
-                    Text("Para que lo encuentre quien esté cerca.").font(.lazyCaption).foregroundStyle(.secondary)
-                }
-            }
-        }
-        .tint(Color.lazyRose)
-        .foregroundStyle(Color.lazyBlack)
-        .padding(16).lazyCard().stickerPadding()
-    }
-
-    /// Vista aparte porque la etiqueta de `PhotosPicker` no esta aislada al main actor.
-    private struct CoverTile: View {
-        let data: Data?
-
-        var body: some View {
-            ZStack {
-                if let data, let image = UIImage(data: data) {
-                    Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
-                } else {
-                    VStack(spacing: 8) {
-                        Image(systemName: "photo.badge.plus").font(.system(size: 28, weight: .bold))
-                        Text("Portada (opcional)").font(.lazyCaption)
-                    }
-                    .foregroundStyle(Color.lazyBlack)
-                }
-            }
-            .frame(height: 150).frame(maxWidth: .infinity)
-            .background(Color.lazyGray).clipped()
-            .lazyCard(cornerRadius: 20).stickerPadding()
         }
     }
 
@@ -175,6 +130,7 @@ struct CreateGroupView: View {
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             description: description.trimmingCharacters(in: .whitespacesAndNewlines),
             category: category,
+            // El enum de Rails usa estos valores, no "public"/"private".
             visibility: isPrivate ? "private_group" : "public_group",
             interestIds: Array(selectedInterests),
             useMyLocation: useMyLocation
@@ -185,9 +141,34 @@ struct CreateGroupView: View {
             onCreated(response.group)
             dismiss()
         } catch APIError.server(_, let message) {
-            toast = Toast(text: message, isError: true)
+            error = AlertMessage("No se pudo crear el grupo", message: message)
         } catch {
-            toast = Toast(text: "No se pudo crear el grupo", isError: true)
+            self.error = AlertMessage("No se pudo crear el grupo")
         }
+    }
+}
+
+/// La etiqueta de `PhotosPicker` no esta aislada al main actor, asi que va en
+/// su propia vista: con concurrencia estricta, meter aqui un modificador
+/// aislado no compila.
+private struct CoverTile: View {
+    let data: Data?
+
+    var body: some View {
+        ZStack {
+            if let data, let image = UIImage(data: data) {
+                Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                VStack(spacing: 8) {
+                    Image(systemName: "photo.badge.plus").font(.title)
+                    Text("Portada (opcional)").font(.subheadline)
+                }
+                .foregroundStyle(Color.accentColor)
+            }
+        }
+        .frame(height: 150)
+        .frame(maxWidth: .infinity)
+        .background(Color(.secondarySystemFill))
+        .clipped()
     }
 }

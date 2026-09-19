@@ -27,6 +27,9 @@ targets:
         Release:
           API_BASE_URL: https://api.toolazy.cl
       base:
+        # Sin esto, Color.accentColor cae en el azul del sistema y el tinte de
+        # marca no llega ni a la barra de pestanas ni a los controles estandar.
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         PRODUCT_BUNDLE_IDENTIFIER: cl.toolazy.friends
         PRODUCT_NAME: Friends
         MARKETING_VERSION: "0.1.0"

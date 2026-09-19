@@ -31,7 +31,7 @@ final class DeckViewModel {
     private(set) var lastSwiped: (card: DeckCard, decision: Decision)?
     private(set) var newMatch: Match?
     var showPaywall = false
-    var toast: Toast?
+    var error: AlertMessage?
 
     let context: DeckContext
     let groupSlug: String?
@@ -123,7 +123,7 @@ final class DeckViewModel {
                         putBack(card); showPaywall = true; return
                     case "premium_required", "superlike_limit_reached":
                         putBack(card); showPaywall = code == "premium_required"
-                        toast = Toast(text: "El superlike es premium", isError: true); return
+                        self.error = AlertMessage("El superlike es premium"); return
                     default:
                         // Rechazo definitivo (bloqueo, cuenta borrada...): la carta se descarta.
                         return
@@ -137,7 +137,7 @@ final class DeckViewModel {
         }
         // No se pudo enviar: la carta vuelve para no perder la decision del usuario.
         putBack(card)
-        toast = Toast(text: "Sin conexion: no se pudo enviar tu decision", isError: true)
+        self.error = AlertMessage("Sin conexión", message: "No se pudo enviar tu decisión.")
     }
 
     private func putBack(_ card: DeckCard) {
@@ -157,10 +157,10 @@ final class DeckViewModel {
         } catch let error as APIError {
             if case .server(let code, let message) = error {
                 if code == "premium_required" { showPaywall = true }
-                else { toast = Toast(text: message, isError: true) }
+                else { self.error = AlertMessage("No se pudo deshacer", message: message) }
             }
         } catch {
-            toast = Toast(text: "No se pudo deshacer", isError: true)
+            self.error = AlertMessage("No se pudo deshacer")
         }
     }
 

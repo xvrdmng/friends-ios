@@ -6,47 +6,33 @@ struct PasskeyGateView: View {
     @State private var model: AuthViewModel?
 
     var body: some View {
-        ZStack {
-            DoodleBackground()
+        VStack(spacing: 24) {
+            Spacer()
 
-            VStack(spacing: 28) {
-                Spacer()
-
-                Text("FRIENDS")
-                    .font(.lazyDisplay)
-                    .kerning(4)
-                    .foregroundStyle(Color.lazyBlack)
-
+            VStack(spacing: 16) {
+                Image(systemName: "heart.circle.fill")
+                    .font(.system(size: 72))
+                    .foregroundStyle(Color.accentColor)
+                Text("Friends")
+                    .font(.largeTitle.weight(.bold))
                 Text("Citas y amistades.\nTu passkey es tu cuenta.")
-                    .font(.lazyBody)
-                    .foregroundStyle(Color.lazyBlack)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+            }
 
-                Spacer()
+            Spacer()
 
-                if let message = model?.errorMessage {
-                    Text(message)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Color.lazyBlack)
-                        .multilineTextAlignment(.center)
-                        .padding(12)
-                        .lazyCard(backgroundColor: .lazyNotice, cornerRadius: 16, offset: 3)
-                        .transition(.scale.combined(with: .opacity))
+            VStack(spacing: 12) {
+                Button("Crear cuenta con passkey") {
+                    Task { await model?.register() }
                 }
+                .buttonStyle(.glassProminent)
 
-                VStack(spacing: 14) {
-                    Button("Crear cuenta con passkey") {
-                        Task { await model?.register() }
-                    }
-                    .buttonStyle(LazyButtonStyle(background: .lazyRed, foreground: .white, fillsWidth: true))
-
-                    Button("Entrar con mi passkey") {
-                        Task { await model?.signIn() }
-                    }
-                    .buttonStyle(LazyButtonStyle(background: .white, foreground: .lazyBlack, fillsWidth: true))
+                Button("Entrar con mi passkey") {
+                    Task { await model?.signIn() }
                 }
-                .disabled(model?.isWorking ?? true)
-                .opacity((model?.isWorking ?? false) ? 0.5 : 1)
+                .buttonStyle(.glass)
 
                 #if DEBUG
                 // Las passkeys necesitan un dominio asociado firmado con una
@@ -55,18 +41,32 @@ struct PasskeyGateView: View {
                 Button("Entrar sin passkey (dev)") {
                     Task { await model?.signInForDevelopment() }
                 }
-                .buttonStyle(LazyButtonStyle(background: .lazyMint, foreground: .lazyBlack, fillsWidth: true))
-                .padding(.top, 4)
+                .buttonStyle(.glass)
+                .tint(.orange)
                 #endif
-
-                Text("PASSKEY · FACE ID")
-                    .font(.lazyMono)
-                    .foregroundStyle(Color.lazyBlack.opacity(0.65))
-                    .padding(.bottom, 24)
             }
-            .padding(.horizontal, 28)
-            .padding(.trailing, 5)
-            .animation(.snappy, value: model?.errorMessage)
+            .controlSize(.large)
+            .frame(maxWidth: .infinity)
+            .disabled(model?.isWorking ?? true)
+
+            Label("Passkey · Face ID", systemImage: "faceid")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 16)
+        }
+        .padding(.horizontal, 28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+        .overlay {
+            if model?.isWorking == true { ProgressView() }
+        }
+        .alert("No se pudo continuar",
+               isPresented: Binding(get: { model?.errorMessage != nil },
+                                    set: { if !$0 { model?.errorMessage = nil } }),
+               presenting: model?.errorMessage) { _ in
+            Button("Aceptar", role: .cancel) {}
+        } message: { message in
+            Text(message)
         }
         .task {
             if model == nil { model = AuthViewModel(session: session) }

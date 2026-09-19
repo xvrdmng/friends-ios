@@ -10,16 +10,17 @@ struct ProfilePreviewView: View {
     @State private var isLoading = true
 
     var body: some View {
-        ZStack {
-            DoodleBackground()
+        Group {
             if let card {
                 CardDetailView(card: card, showsSafetyActions: false)
             } else if isLoading {
-                ProgressView()
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                StateCard(emoji: "🫥", title: "Aún no hay nada que enseñar",
-                          message: "Completa tu perfil y sube fotos para verte como te ven.", color: .lazyNotice)
-                    .padding(22)
+                ContentUnavailableView {
+                    Label("Aún no hay nada que enseñar", systemImage: "person.crop.circle.badge.questionmark")
+                } description: {
+                    Text("Completa tu perfil y sube fotos para verte como te ven.")
+                }
             }
         }
         .task { await build() }

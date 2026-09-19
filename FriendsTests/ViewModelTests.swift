@@ -96,7 +96,7 @@ final class DeckViewModelTests: XCTestCase {
         let back = await waitUntil(timeout: 8) { vm.cards.first?.id == "a" }
         XCTAssertTrue(back, "tras reintentar, la decision no se pierde")
         XCTAssertEqual(attempts, 3)
-        XCTAssertNotNil(vm.toast)
+        XCTAssertNotNil(vm.error)
     }
 
     func testNoSePideElMazoDosVecesALaVez() async {

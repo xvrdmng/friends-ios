@@ -9,40 +9,56 @@ struct MatchCelebrationView: View {
     let onKeepSwiping: () -> Void
 
     @State private var appeared = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
-            Color.lazyRose.ignoresSafeArea()
-            VStack(spacing: 28) {
+            Rectangle()
+                .fill(.regularMaterial)
+                .ignoresSafeArea()
+
+            VStack(spacing: 24) {
                 Spacer()
-                Text("¡ES UN\nMATCH!")
-                    .font(.system(size: 56, weight: .black)).multilineTextAlignment(.center)
-                    .foregroundStyle(Color.lazyBlack).rotationEffect(.degrees(-4))
-                    .scaleEffect(appeared ? 1 : 0.4)
+
+                Text("¡Es un match!")
+                    .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .scaleEffect(reduceMotion || appeared ? 1 : 0.6)
 
                 HStack(spacing: -20) {
-                    AvatarView(url: myPhoto, name: myName, size: 130).rotationEffect(.degrees(-8))
-                    AvatarView(url: match.other.thumbUrl, name: match.other.displayName, size: 130).rotationEffect(.degrees(8))
+                    AvatarView(url: myPhoto, name: myName, size: 120)
+                    AvatarView(url: match.other.thumbUrl, name: match.other.displayName, size: 120)
                 }
-                .offset(y: appeared ? 0 : 60).opacity(appeared ? 1 : 0)
+                .opacity(reduceMotion || appeared ? 1 : 0)
 
-                Text("Tú y \(match.other.displayName) se gustaron")
-                    .font(.lazySubhead).foregroundStyle(Color.lazyBlack)
-                if let group = match.group { Tag(text: group.name, color: .lazyYellow) }
+                VStack(spacing: 8) {
+                    Text("Tú y \(match.other.displayName) se gustaron")
+                        .font(.title3)
+                        .multilineTextAlignment(.center)
+                    if let group = match.group {
+                        Tag(text: group.name, tint: Color.accentColor)
+                    }
+                }
 
                 Spacer()
 
-                VStack(spacing: 14) {
+                VStack(spacing: 12) {
                     Button("Enviar mensaje", action: onMessage)
-                        .buttonStyle(LazyButtonStyle(background: .lazyBlack, foreground: .white, fillsWidth: true))
+                        .buttonStyle(.glassProminent)
                     Button("Seguir mirando", action: onKeepSwiping)
-                        .buttonStyle(LazyButtonStyle(background: .white, foreground: .lazyBlack, fillsWidth: true))
+                        .buttonStyle(.glass)
                 }
-                .padding(.horizontal, 30).padding(.bottom, 40)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 32)
+                .padding(.bottom, 40)
             }
         }
         .sensoryFeedback(.success, trigger: appeared)
-        .onAppear { withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) { appeared = true } }
+        .onAppear {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) { appeared = true }
+        }
         .accessibilityElement(children: .contain)
+        .accessibilityLabel("Es un match con \(match.other.displayName)")
     }
 }

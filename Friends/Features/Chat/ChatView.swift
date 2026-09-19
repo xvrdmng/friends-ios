@@ -1,8 +1,8 @@
 import PhotosUI
 import SwiftUI
 
-/// Conversacion. Se presenta a pantalla completa (fullScreenCover) para quedar por
-/// encima de la barra flotante de pestanas.
+/// Conversacion. Se presenta a pantalla completa para quedar por encima de la
+/// barra de pestanas.
 struct ChatView: View {
     let match: Match
     let myID: String
@@ -24,14 +24,33 @@ struct ChatView: View {
     }
 
     var body: some View {
-        ZStack {
-            DoodleBackground()
-            VStack(spacing: 0) {
-                header
+        NavigationStack {
+            Group {
                 if model.isClosed { closedState } else { messageList }
             }
+            .background(Color(.systemGroupedBackground))
+            .safeAreaInset(edge: .bottom) { if !model.isClosed { inputBar } }
+            .navigationTitle(match.other.displayName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Volver", systemImage: "chevron.left") { onClose(false) }
+                }
+                ToolbarItem(placement: .principal) { title }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button("Reportar", systemImage: "flag") {
+                            report = ReportTarget(kind: .user, id: match.other.userId,
+                                                  userID: match.other.userId, displayName: match.other.displayName)
+                        }
+                        Button("Bloquear", systemImage: "hand.raised", role: .destructive) { confirmBlock = true }
+                        Button("Deshacer match", systemImage: "heart.slash", role: .destructive) { confirmUnmatch = true }
+                    } label: {
+                        Label("Más opciones", systemImage: "ellipsis")
+                    }
+                }
+            }
         }
-        .safeAreaInset(edge: .bottom) { if !model.isClosed { inputBar } }
         .task { await model.start() }
         .onDisappear { model.stop() }
         .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await model.refresh() } } }
@@ -39,46 +58,34 @@ struct ChatView: View {
         .sheet(item: $report) { target in
             ReportSheet(target: target) { didBlock in if didBlock { onClose(true) } }
         }
-        .confirmationDialog("¿Deshacer el match con \(match.other.displayName)?", isPresented: $confirmUnmatch, titleVisibility: .visible) {
+        .confirmationDialog("¿Deshacer el match con \(match.other.displayName)?",
+                            isPresented: $confirmUnmatch, titleVisibility: .visible) {
             Button("Deshacer match", role: .destructive) { Task { if await model.unmatch() { onClose(true) } } }
         } message: { Text("La conversación se cerrará para los dos.") }
-        .confirmationDialog("¿Bloquear a \(match.other.displayName)?", isPresented: $confirmBlock, titleVisibility: .visible) {
-            Button("Bloquear", role: .destructive) { Task { if await SafetyActions.block(userID: match.other.userId) { onClose(true) } } }
+        .confirmationDialog("¿Bloquear a \(match.other.displayName)?",
+                            isPresented: $confirmBlock, titleVisibility: .visible) {
+            Button("Bloquear", role: .destructive) {
+                Task { if await SafetyActions.block(userID: match.other.userId) { onClose(true) } }
+            }
         } message: { Text("No podrán verse ni escribirse.") }
     }
 
-    // MARK: - Cabecera
-
-    private var header: some View {
-        HStack(spacing: 12) {
-            Button { onClose(false) } label: {
-                Image(systemName: "chevron.left").font(.system(size: 18, weight: .black))
-                    .foregroundStyle(Color.lazyBlack).frame(width: 44, height: 44)
-                    .glassEffect(.regular, in: .circle)
-            }
-            .accessibilityLabel("Volver")
-
-            AvatarView(url: match.other.thumbUrl, name: match.other.displayName, size: 46)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(match.other.displayName).font(.lazySubhead).foregroundStyle(Color.lazyBlack)
+    /// El titulo lleva la foto y el estado "escribiendo…", que el titulo de
+    /// navegacion por si solo no puede mostrar.
+    private var title: some View {
+        HStack(spacing: 8) {
+            AvatarView(url: match.other.thumbUrl, name: match.other.displayName, size: 30)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(match.other.displayName)
+                    .font(.headline)
+                    .lineLimit(1)
                 Text(model.otherIsTyping ? "escribiendo…" : (match.group?.name ?? Labels.contexts[match.context] ?? ""))
-                    .font(.lazyMono).foregroundStyle(.secondary)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            Spacer()
-            Menu {
-                Button("Reportar", systemImage: "flag") {
-                    report = ReportTarget(kind: .user, id: match.other.userId, userID: match.other.userId, displayName: match.other.displayName)
-                }
-                Button("Bloquear", systemImage: "hand.raised", role: .destructive) { confirmBlock = true }
-                Button("Deshacer match", systemImage: "heart.slash", role: .destructive) { confirmUnmatch = true }
-            } label: {
-                Image(systemName: "ellipsis").font(.system(size: 18, weight: .black))
-                    .foregroundStyle(Color.lazyBlack).frame(width: 44, height: 44)
-                    .glassEffect(.regular, in: .circle)
-            }
-            .accessibilityLabel("Más opciones")
         }
-        .padding(.horizontal, 16).padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Mensajes
@@ -88,8 +95,11 @@ struct ChatView: View {
             ScrollView {
                 LazyVStack(spacing: 8) {
                     if model.hasMore {
-                        Button(model.isLoadingOlder ? "Cargando…" : "Cargar anteriores") { Task { await model.loadOlder() } }
-                            .font(.lazyMono).foregroundStyle(.secondary).padding(.vertical, 8)
+                        Button(model.isLoadingOlder ? "Cargando…" : "Cargar anteriores") {
+                            Task { await model.loadOlder() }
+                        }
+                        .font(.footnote)
+                        .padding(.vertical, 8)
                     }
                     if model.isLoading { ProgressView().padding(.top, 40) }
                     else if model.messages.isEmpty { emptyChat }
@@ -109,7 +119,12 @@ struct ChatView: View {
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: model.messages.count) { withAnimation(.snappy) { proxy.scrollTo("bottom") } }
             .onChange(of: model.otherIsTyping) { withAnimation(.snappy) { proxy.scrollTo("bottom") } }
-            .onChange(of: focused) { Task { try? await Task.sleep(for: .milliseconds(250)); withAnimation { proxy.scrollTo("bottom") } } }
+            .onChange(of: focused) {
+                Task {
+                    try? await Task.sleep(for: .milliseconds(250))
+                    withAnimation { proxy.scrollTo("bottom") }
+                }
+            }
             .onChange(of: model.isLoading) { _, loading in if !loading { proxy.scrollTo("bottom") } }
         }
     }
@@ -118,18 +133,24 @@ struct ChatView: View {
 
     private func showsDay(at index: Int) -> Bool {
         guard index > 0 else { return true }
-        return !Calendar.current.isDate(model.messages[index].createdAt, inSameDayAs: model.messages[index - 1].createdAt)
+        return !Calendar.current.isDate(model.messages[index].createdAt,
+                                        inSameDayAs: model.messages[index - 1].createdAt)
     }
 
     private func dayLabel(_ date: Date) -> some View {
-        Text(date.formatted(.dateTime.weekday(.wide).day().month(.wide)).uppercased())
-            .font(.system(size: 11, weight: .bold, design: .monospaced))
-            .foregroundStyle(.secondary).padding(.vertical, 8)
+        Text(date.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .padding(.vertical, 8)
     }
 
     private var emptyChat: some View {
-        StateCard(emoji: "👋", title: "Rompe el hielo", message: "Es un match con \(match.other.displayName). Escríbele algo.", color: .lazyMint)
-            .padding(.top, 30)
+        ContentUnavailableView {
+            Label("Rompe el hielo", systemImage: "hand.wave")
+        } description: {
+            Text("Es un match con \(match.other.displayName). Escríbele algo.")
+        }
+        .padding(.top, 30)
     }
 
     private func bubble(_ message: ChatMessage, isLastMine: Bool) -> some View {
@@ -139,57 +160,81 @@ struct ChatView: View {
                 if message.mine { Spacer(minLength: 50) }
                 content(of: message)
                     .padding(.horizontal, 14).padding(.vertical, 10)
-                    .foregroundStyle(Color.lazyBlack)
-                    .lazyCard(backgroundColor: message.mine ? .lazyRose : .white, cornerRadius: 18, offset: 3)
-                    .padding(.trailing, 3).padding(.bottom, 3)
+                    .foregroundStyle(message.mine ? .white : Color.primary)
+                    .background(
+                        message.mine ? AnyShapeStyle(Color.accentColor)
+                                     : AnyShapeStyle(Color(.secondarySystemGroupedBackground)),
+                        in: .rect(cornerRadius: 20, style: .continuous)
+                    )
                     .opacity(state == .sending ? 0.6 : 1)
                     .contextMenu {
                         if !message.mine {
                             Button("Reportar mensaje", systemImage: "flag") {
-                                report = ReportTarget(kind: .message, id: message.id, userID: match.other.userId, displayName: match.other.displayName)
+                                report = ReportTarget(kind: .message, id: message.id,
+                                                      userID: match.other.userId,
+                                                      displayName: match.other.displayName)
                             }
                         }
-                        if let body = message.body { Button("Copiar", systemImage: "doc.on.doc") { UIPasteboard.general.string = body } }
+                        if let body = message.body {
+                            Button("Copiar", systemImage: "doc.on.doc") { UIPasteboard.general.string = body }
+                        }
                     }
                 if !message.mine { Spacer(minLength: 50) }
             }
-            HStack(spacing: 6) {
-                if state == .failed {
-                    Button { model.retry(message) } label: {
-                        Label("No enviado · Reintentar", systemImage: "exclamationmark.arrow.circlepath")
-                    }
-                    .font(.system(size: 12, weight: .bold)).foregroundStyle(Color.lazyRed)
-                } else if isLastMine && message.mine && state == nil {
-                    Text(message.readAt != nil ? "Leído" : "Enviado")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 6)
+            status(for: message, state: state, isLastMine: isLastMine)
         }
+    }
+
+    @ViewBuilder
+    private func status(for message: ChatMessage, state: ChatViewModel.SendState?, isLastMine: Bool) -> some View {
+        HStack(spacing: 6) {
+            if state == .failed {
+                Button { model.retry(message) } label: {
+                    Label("No enviado · Reintentar", systemImage: "exclamationmark.arrow.circlepath")
+                }
+                .font(.caption2)
+                .foregroundStyle(.red)
+            } else if isLastMine && message.mine && state == nil {
+                Text(message.readAt != nil ? "Leído" : "Enviado")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 6)
     }
 
     @ViewBuilder
     private func content(of message: ChatMessage) -> some View {
         if message.kind == "image", let url = message.imageUrl {
-            RemoteImage(url: url).frame(width: 220, height: 280).clipShape(RoundedRectangle(cornerRadius: 12))
+            RemoteImage(url: url)
+                .frame(width: 220, height: 280)
+                .clipShape(.rect(cornerRadius: 12))
+                .accessibilityLabel("Foto")
         } else {
-            Text(message.body ?? "").font(.lazyBody)
+            Text(message.body ?? "")
         }
     }
 
     private var typingBubble: some View {
         HStack {
-            Text("•••").font(.lazyBody).foregroundStyle(.secondary)
+            Text("•••")
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 16).padding(.vertical, 8)
-                .lazyCard(cornerRadius: 16, offset: 2).padding(.trailing, 2).padding(.bottom, 2)
+                .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 18, style: .continuous))
+                .accessibilityLabel("\(match.other.displayName) está escribiendo")
             Spacer()
         }
     }
 
     private var closedState: some View {
-        StateCard(emoji: "🚪", title: "Esta conversación ya no está disponible",
-                  message: "El match se deshizo o la otra persona ya no está.", actionTitle: "Volver") { onClose(true) }
-            .padding(22).frame(maxHeight: .infinity)
+        ContentUnavailableView {
+            Label("Esta conversación ya no está disponible", systemImage: "door.left.hand.closed")
+        } description: {
+            Text("El match se deshizo o la otra persona ya no está.")
+        } actions: {
+            Button("Volver") { onClose(true) }
+                .buttonStyle(.glassProminent)
+        }
     }
 
     // MARK: - Entrada
@@ -197,30 +242,29 @@ struct ChatView: View {
     private var inputBar: some View {
         HStack(alignment: .bottom, spacing: 10) {
             PhotosPicker(selection: $photoItem, matching: .images) {
-                Image(systemName: "photo").font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(Color.lazyBlack).frame(width: 46, height: 46)
-                    .glassEffect(.regular.interactive(), in: .circle)
+                PhotoPickerLabel()
             }
             .accessibilityLabel("Enviar foto")
 
-            TextField("Escribe un mensaje", text: Bindable(model).draft, axis: .vertical)
-                .font(.lazyBody).lineLimit(1...5).focused($focused)
-                .padding(.horizontal, 16).padding(.vertical, 11)
-                .lazyCard(cornerRadius: 22, offset: 3).padding(.trailing, 3).padding(.bottom, 3)
+            TextField("Mensaje", text: Bindable(model).draft, axis: .vertical)
+                .lineLimit(1...5)
+                .focused($focused)
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                .background(Color(.secondarySystemGroupedBackground), in: .capsule)
                 .submitLabel(.send)
 
             Button { model.send() } label: {
-                Image(systemName: "arrow.up").font(.system(size: 18, weight: .black))
-                    .foregroundStyle(Color.lazyBlack).frame(width: 46, height: 46)
-                    .background(Color.lazyRose, in: Circle())
-                    .overlay(Circle().stroke(Color.lazyBlack, lineWidth: 3))
+                Image(systemName: "arrow.up")
+                    .font(.headline)
+                    .frame(width: 34, height: 34)
             }
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.circle)
             .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .opacity(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
             .accessibilityLabel("Enviar")
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(.ultraThinMaterial)
+        .background(.bar)
     }
 
     private func loadPhoto(_ item: PhotosPickerItem?) async {
@@ -228,5 +272,17 @@ struct ChatView: View {
               let image = UIImage(data: data), let jpeg = image.jpegData(compressionQuality: 0.8) else { return }
         photoItem = nil
         model.sendImage(jpeg)
+    }
+}
+
+/// La etiqueta de `PhotosPicker` no esta aislada al main actor, asi que va en
+/// su propia vista: con concurrencia estricta, meter aqui un modificador
+/// aislado no compila.
+private struct PhotoPickerLabel: View {
+    var body: some View {
+        Image(systemName: "photo")
+            .font(.headline)
+            .frame(width: 34, height: 34)
+            .foregroundStyle(Color.accentColor)
     }
 }

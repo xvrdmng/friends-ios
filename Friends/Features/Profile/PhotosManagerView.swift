@@ -15,51 +15,56 @@ struct PhotosManagerView: View {
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var isLoading = true
     @State private var isUploading = false
-    @State private var toast: Toast?
+    @State private var error: AlertMessage?
 
     private let columns = [GridItem(.adaptive(minimum: 100), spacing: 14)]
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                DoodleBackground()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("\(photos.count)/\(Self.maxPhotos) FOTOS · MÍNIMO \(Self.minPhotos)")
-                            .font(.lazyMono).foregroundStyle(.secondary)
-                        Text("Mantén pulsada una foto para moverla. La primera es tu portada.")
-                            .font(.lazyCaption).foregroundStyle(.secondary)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Mantén pulsada una foto para moverla. La primera es tu portada.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
 
-                        if isLoading {
-                            ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
-                        } else {
-                            grid
-                        }
-                        if photos.count < Self.minPhotos {
-                            Text("Con menos de \(Self.minPhotos) fotos no apareces en el mazo.")
-                                .font(.lazyCaption).foregroundStyle(Color.lazyRed)
-                        }
+                    if isLoading {
+                        ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
+                    } else {
+                        grid
                     }
-                    .padding(22)
+
+                    if photos.count < Self.minPhotos {
+                        Label("Con menos de \(Self.minPhotos) fotos no apareces en el mazo.",
+                              systemImage: "exclamationmark.triangle")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
                 }
+                .padding(20)
             }
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("Tus fotos")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Listo") { dismiss() } }
             }
-            .toast($toast)
+            .errorAlert($error)
         }
         .task { await load() }
         .onChange(of: pickerItems) { _, items in Task { await upload(items) } }
     }
 
     private var grid: some View {
-        LazyVGrid(columns: columns, spacing: 14) {
+        // La etiqueta del picker es un closure Sendable: el estado se lee aqui
+        // fuera, no dentro, o no compila con concurrencia estricta.
+        let uploading = isUploading
+        return LazyVGrid(columns: columns, spacing: 14) {
             ForEach(photos) { photo in
                 tile(photo)
                     .draggable(photo.id) {
-                        RemoteImage(url: photo.thumbURL).frame(width: 90, height: 115).clipShape(.rect(cornerRadius: 12))
+                        RemoteImage(url: photo.thumbURL)
+                            .frame(width: 90, height: 115)
+                            .clipShape(.rect(cornerRadius: 12))
                     }
                     .dropDestination(for: String.self) { items, _ in
                         guard let dragged = items.first else { return false }
@@ -68,39 +73,41 @@ struct PhotosManagerView: View {
                     }
             }
             if photos.count < Self.maxPhotos {
-                PhotosPicker(selection: $pickerItems, maxSelectionCount: Self.maxPhotos - photos.count,
+                PhotosPicker(selection: $pickerItems,
+                             maxSelectionCount: Self.maxPhotos - photos.count,
                              matching: .images) {
-                    AddPhotoTile(isUploading: isUploading)
+                    AddPhotoTile(isUploading: uploading)
                 }
-                .disabled(isUploading)
+                .disabled(uploading)
             }
         }
     }
 
     private func tile(_ photo: PhotoItem) -> some View {
-        ZStack(alignment: .topTrailing) {
-            RemoteImage(url: photo.thumbURL)
-                .frame(maxWidth: .infinity).frame(height: 140).clipped()
-                .lazyCard(cornerRadius: 16).stickerPadding()
-
-            Button { Task { await remove(photo) } } label: {
-                Image(systemName: "xmark").font(.system(size: 12, weight: .black))
-                    .foregroundStyle(Color.lazyBlack).frame(width: 28, height: 28)
-                    .background(Color.white, in: Circle())
-                    .overlay(Circle().stroke(Color.lazyBlack, lineWidth: 2))
+        RemoteImage(url: photo.thumbURL)
+            .frame(maxWidth: .infinity)
+            .frame(height: 140)
+            .clipped()
+            .clipShape(.rect(cornerRadius: 14, style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                Button { Task { await remove(photo) } } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, .black.opacity(0.5))
+                }
+                .padding(6)
+                .accessibilityLabel("Borrar foto")
             }
-            .padding(10)
-            .accessibilityLabel("Borrar foto")
-
-            if !photo.isApproved {
-                Text("EN REVISIÓN").font(.system(size: 10, weight: .black, design: .monospaced))
-                    .foregroundStyle(Color.lazyBlack)
-                    .padding(.horizontal, 6).padding(.vertical, 3)
-                    .background(Color.lazyNotice, in: Capsule())
-                    .padding(8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            .overlay(alignment: .bottomLeading) {
+                if !photo.isApproved {
+                    Text("En revisión")
+                        .font(.caption2)
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(.ultraThinMaterial, in: .capsule)
+                        .padding(6)
+                }
             }
-        }
     }
 
     // MARK: - Datos
@@ -121,11 +128,12 @@ struct PhotosManagerView: View {
                   let jpeg = Self.jpeg(from: data) else { continue }
             do {
                 let response: PhotoResponse = try await api.upload(
-                    .photos, field: "image", data: jpeg, filename: "photo.jpg", mimeType: "image/jpeg", fields: [:]
+                    .photos, field: "image", data: jpeg, filename: "photo.jpg",
+                    mimeType: "image/jpeg", fields: [:]
                 )
                 photos.append(response.photo)
             } catch {
-                toast = Toast(text: "No se pudo subir una foto", isError: true)
+                self.error = AlertMessage("No se pudo subir una foto")
             }
         }
         onChanged()
@@ -137,7 +145,7 @@ struct PhotosManagerView: View {
             photos.removeAll { $0.id == photo.id }
             onChanged()
         } catch {
-            toast = Toast(text: "No se pudo borrar la foto", isError: true)
+            self.error = AlertMessage("No se pudo borrar la foto")
         }
     }
 
@@ -157,24 +165,8 @@ struct PhotosManagerView: View {
             try await api.send(.orderPhotos, body: OrderRequest(ids: photos.map(\.id)))
             onChanged()
         } catch {
-            toast = Toast(text: "No se pudo guardar el orden", isError: true)
+            self.error = AlertMessage("No se pudo guardar el orden")
             await load()
-        }
-    }
-
-    /// Vista aparte porque la etiqueta de `PhotosPicker` no esta aislada al main actor.
-    private struct AddPhotoTile: View {
-        let isUploading: Bool
-
-        var body: some View {
-            VStack(spacing: 8) {
-                if isUploading { ProgressView() }
-                else { Image(systemName: "plus").font(.system(size: 26, weight: .black)) }
-                Text(isUploading ? "Subiendo…" : "Añadir").font(.lazyCaption)
-            }
-            .foregroundStyle(Color.lazyBlack)
-            .frame(maxWidth: .infinity).frame(height: 140)
-            .lazyCard(backgroundColor: .lazyRose, cornerRadius: 16).stickerPadding()
         }
     }
 
@@ -189,5 +181,23 @@ struct PhotosManagerView: View {
         let renderer = UIGraphicsImageRenderer(size: size)
         let resized = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
         return resized.jpegData(compressionQuality: 0.85)
+    }
+}
+
+/// La etiqueta de `PhotosPicker` no esta aislada al main actor, asi que va en
+/// su propia vista: con concurrencia estricta, meter aqui un modificador
+/// aislado no compila.
+private struct AddPhotoTile: View {
+    let isUploading: Bool
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if isUploading { ProgressView() } else { Image(systemName: "plus").font(.title2) }
+            Text(isUploading ? "Subiendo…" : "Añadir").font(.caption)
+        }
+        .foregroundStyle(Color.accentColor)
+        .frame(maxWidth: .infinity)
+        .frame(height: 140)
+        .background(Color(.secondarySystemFill), in: .rect(cornerRadius: 14, style: .continuous))
     }
 }
