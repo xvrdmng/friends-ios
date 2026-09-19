@@ -1,0 +1,34 @@
+name: Friends
+options:
+  bundleIdPrefix: cl.toolazy
+  deploymentTarget:
+    iOS: "27.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEVELOPMENT_TEAM: ""   # rellenar con el Team ID de Apple Developer
+
+targets:
+  Friends:
+    type: application
+    platform: iOS
+    sources:
+      - path: Friends
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cl.toolazy.friends
+        PRODUCT_NAME: Friends
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1"     # solo iPhone
+        CODE_SIGN_ENTITLEMENTS: Friends/Friends.entitlements
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Usamos tu ubicación para mostrarte personas cerca de ti. Nunca compartimos tus coordenadas exactas con nadie."
+        INFOPLIST_KEY_NSCameraUsageDescription: "Para que puedas tomarte una foto de perfil."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Para que elijas las fotos de tu perfil."
