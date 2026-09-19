@@ -12,8 +12,16 @@ extension Color {
     static let lazyPurple    = Color(hex: "#A855F7")
     static let lazyCream     = Color(hex: "#FFFEF0")
     static let lazyHeroBG    = Color(hex: "#E8E4F0")
+
+    /// Fondo de la app. Blanco: deja que el color viva en las tarjetas.
+    static let appBackground = Color(hex: "#FAF6F0")
     static let lazyGray      = Color(hex: "#F5F5F7")
     static let lazyBlack     = Color.black
+    static let lazyRed       = Color(hex: "#C8392B")
+    static let lazyYellow    = Color(hex: "#FFE14D")
+    static let lazyRose      = Color(hex: "#F4B6D6")
+    static let lazyMint      = Color(hex: "#B9F0D0")
+    static let lazyNotice    = Color(hex: "#FBE6BE")
 
     static let cardPink   = Color(hex: "#FFB8E8")
     static let cardPurple = Color(hex: "#C8A8FF")

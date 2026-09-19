@@ -8,11 +8,14 @@ import Foundation
 final class APIClient: Sendable {
     static let shared = APIClient()
 
-    #if DEBUG
-    private let baseURL = URL(string: "http://localhost:3000")!
-    #else
-    private let baseURL = URL(string: "https://api.toolazy.cl")!
-    #endif
+    /// Se lee del Info.plist (clave APIBaseURL), que project.yml fija por
+    /// configuracion. No hay variante localhost: iOS solo emite passkeys para
+    /// dominios asociados por HTTPS, asi que incluso en desarrollo hay que
+    /// apuntar al dominio real.
+    private let baseURL: URL = {
+        let value = Bundle.main.object(forInfoDictionaryKey: "APIBaseURL") as? String
+        return URL(string: value ?? "https://api.toolazy.cl")!
+    }()
 
     private let session: URLSession
     private let sessionStore: SessionStore
@@ -33,10 +36,13 @@ final class APIClient: Sendable {
         return d
     }
 
-    private var encoder: JSONEncoder {
+    /// La API habla snake_case. WebAuthn es la excepcion: exige claves en camelCase
+    /// exacto (`rawId`, `clientDataJSON`), asi que sus llamadas pasan
+    /// `snakeCase: false`.
+    private func encoder(snakeCase: Bool) -> JSONEncoder {
         let e = JSONEncoder()
-        e.keyEncodingStrategy = .convertToSnakeCase
         e.dateEncodingStrategy = .iso8601
+        if snakeCase { e.keyEncodingStrategy = .convertToSnakeCase }
         return e
     }
 
@@ -45,9 +51,10 @@ final class APIClient: Sendable {
     @discardableResult
     func send<Response: Decodable & Sendable>(
         _ endpoint: APIEndpoint,
-        body: (any Encodable & Sendable)? = nil
+        body: (any Encodable & Sendable)? = nil,
+        snakeCase: Bool = true
     ) async throws -> Response {
-        let request = try await buildRequest(endpoint, body: body)
+        let request = try await buildRequest(endpoint, body: body, snakeCase: snakeCase)
         let data = try await execute(request)
         do {
             return try decoder.decode(Response.self, from: data)
@@ -56,14 +63,49 @@ final class APIClient: Sendable {
         }
     }
 
-    func send(_ endpoint: APIEndpoint, body: (any Encodable & Sendable)? = nil) async throws {
-        let request = try await buildRequest(endpoint, body: body)
+    func send(_ endpoint: APIEndpoint, body: (any Encodable & Sendable)? = nil, snakeCase: Bool = true) async throws {
+        let request = try await buildRequest(endpoint, body: body, snakeCase: snakeCase)
         _ = try await execute(request)
+    }
+
+    /// Cuerpo sin decodificar: el export de datos (GDPR) se guarda tal cual en un fichero.
+    func sendRaw(_ endpoint: APIEndpoint) async throws -> Data {
+        try await execute(buildRequest(endpoint, body: nil, snakeCase: true))
+    }
+
+    /// Sube un archivo como multipart/form-data (fotos de perfil, portadas, imagenes de chat).
+    @discardableResult
+    func upload<Response: Decodable & Sendable>(
+        _ endpoint: APIEndpoint,
+        field: String = "image",
+        data: Data,
+        filename: String = "foto.jpg",
+        mimeType: String = "image/jpeg",
+        fields: [String: String] = [:]
+    ) async throws -> Response {
+        var request = try await buildRequest(endpoint, body: nil, snakeCase: true)
+        let boundary = "friends-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 60
+
+        var body = Data()
+        for (key, value) in fields {
+            body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(key)\"\r\n\r\n\(value)\r\n")
+        }
+        body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(field)\"; filename=\"\(filename)\"\r\nContent-Type: \(mimeType)\r\n\r\n")
+        body.append(data)
+        body.append("\r\n--\(boundary)--\r\n")
+        request.httpBody = body
+
+        let responseData = try await execute(request)
+        do { return try decoder.decode(Response.self, from: responseData) }
+        catch { throw APIError.decoding(error) }
     }
 
     private func buildRequest(
         _ endpoint: APIEndpoint,
-        body: (any Encodable & Sendable)?
+        body: (any Encodable & Sendable)?,
+        snakeCase: Bool
     ) async throws -> URLRequest {
         var components = URLComponents(
             url: baseURL.appendingPathComponent(endpoint.path),
@@ -85,7 +127,7 @@ final class APIClient: Sendable {
 
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try encoder.encode(body)
+            request.httpBody = try encoder(snakeCase: snakeCase).encode(body)
         }
 
         return request
@@ -115,5 +157,12 @@ final class APIClient: Sendable {
             }
             throw APIError.http(status: http.statusCode)
         }
+    }
+}
+
+
+private extension Data {
+    mutating func append(_ string: String) {
+        if let data = string.data(using: .utf8) { append(data) }
     }
 }

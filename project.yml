@@ -19,6 +19,13 @@ targets:
     sources:
       - path: Friends
     settings:
+      configs:
+        Debug:
+          # Sin cuenta de Apple Developer no hay passkeys, asi que en Debug se
+          # trabaja contra el Rails local con el atajo /auth/dev_session.
+          API_BASE_URL: http://localhost:3000
+        Release:
+          API_BASE_URL: https://api.toolazy.cl
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cl.toolazy.friends
         PRODUCT_NAME: Friends
@@ -26,9 +33,65 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1"     # solo iPhone
         CODE_SIGN_ENTITLEMENTS: Friends/Friends.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Friends/Info.plist
+    info:
+      path: Friends/Info.plist
+      properties:
+        # El launch screen debe llevar el color de marca: por defecto es blanco,
+        # y durante el arranque la app parece rota.
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSLocationWhenInUseUsageDescription: "Usamos tu ubicacion para mostrarte personas cerca de ti. Nunca compartimos tus coordenadas exactas con nadie."
+        NSCameraUsageDescription: "Para que puedas tomarte una foto de perfil."
+        NSPhotoLibraryUsageDescription: "Para que elijas las fotos de tu perfil."
+        APIBaseURL: "$(API_BASE_URL)"
+        # Permite HTTP contra localhost en desarrollo. No abre trafico HTTP
+        # arbitrario a internet: solo red local.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+
+  FriendsTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: FriendsTests
+    dependencies:
+      - target: Friends
+    settings:
+      base:
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Usamos tu ubicación para mostrarte personas cerca de ti. Nunca compartimos tus coordenadas exactas con nadie."
-        INFOPLIST_KEY_NSCameraUsageDescription: "Para que puedas tomarte una foto de perfil."
-        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Para que elijas las fotos de tu perfil."
+        PRODUCT_BUNDLE_IDENTIFIER: cl.toolazy.friends.tests
+        SWIFT_STRICT_CONCURRENCY: minimal
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Friends.app/Friends"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+  FriendsUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: FriendsUITests
+    dependencies:
+      - target: Friends
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: cl.toolazy.friends.uitests
+        SWIFT_STRICT_CONCURRENCY: minimal
+        TEST_TARGET_NAME: Friends
+
+schemes:
+  Friends:
+    build:
+      targets:
+        Friends: all
+    run:
+      # Compras de prueba locales: no hace falta cuenta de Apple Developer.
+      storeKitConfiguration: Friends.storekit
+    test:
+      config: Debug
+      targets:
+        - FriendsTests
+        - FriendsUITests

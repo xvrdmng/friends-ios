@@ -4,65 +4,124 @@ enum HTTPMethod: String, Sendable {
     case get = "GET", post = "POST", patch = "PATCH", put = "PUT", delete = "DELETE"
 }
 
+enum DeckContext: String, Codable, Sendable, CaseIterable {
+    case dating, friendship, language, group
+}
+
+enum GroupScope: String, Sendable { case discover, mine }
+
 /// Espejo de `config/routes.rb` de friends-api.
 enum APIEndpoint: Sendable {
+    // Autenticacion
+    case devSession, devPremium
     case registrationOptions, registration
     case sessionOptions, session, signOut
-    case me, updateMe, onboarding, location
+
+    // Perfil
+    case me, updateMe, deleteMe, exportMe
+    case onboarding, location
+    case photos, photo(id: String), orderPhotos
+    case filters, updateFilters
     case interests, languages
-    case deck(context: DeckContext, groupID: String?)
-    case like
-    case matches
-    case messages(matchID: String)
+
+    // Descubrimiento
+    case deck(context: DeckContext, groupSlug: String?)
+    case like, likesReceived, rewind
+
+    // Matches y chat
+    case matches, unmatch(id: String)
+    case messages(matchID: String, before: String?)
+    case sendMessage(matchID: String)
+    case markRead(matchID: String)
+
+    // Grupos
+    case groups(scope: GroupScope, category: String?, query: String?)
+    case createGroup
+    case group(slug: String)
+    case join(slug: String), leave(slug: String)
+    case members(slug: String)
+    case kick(slug: String, userID: String)
+
+    // Seguridad
+    case blocks, block, unblock(userID: String)
+    case report
+    case registerDevice
+
+    // Premium
+    case syncSubscription
 
     var method: HTTPMethod {
         switch self {
-        case .me, .interests, .languages, .deck, .matches, .messages: .get
-        case .updateMe, .onboarding: .patch
+        case .me, .exportMe, .photos, .filters, .interests, .languages, .deck, .likesReceived,
+             .matches, .messages, .groups, .group, .members, .blocks:
+            .get
+        case .updateMe: .patch
+        case .onboarding, .orderPhotos, .updateFilters: .patch
         case .location: .put
-        case .signOut: .delete
+        case .deleteMe, .signOut, .photo, .unmatch, .leave, .kick, .unblock: .delete
         default: .post
         }
     }
 
     var path: String {
         switch self {
-        case .registrationOptions: "/api/v1/auth/registration/options"
-        case .registration:        "/api/v1/auth/registration"
-        case .sessionOptions:      "/api/v1/auth/session/options"
-        case .session, .signOut:   "/api/v1/auth/session"
-        case .me, .updateMe:       "/api/v1/me"
-        case .onboarding:          "/api/v1/me/onboarding"
-        case .location:            "/api/v1/me/location"
-        case .interests:           "/api/v1/interests"
-        case .languages:           "/api/v1/languages"
-        case .deck:                "/api/v1/deck"
-        case .like:                "/api/v1/likes"
-        case .matches:             "/api/v1/matches"
-        case .messages(let id):    "/api/v1/matches/\(id)/messages"
+        case .devSession:           "/api/v1/auth/dev_session"
+        case .devPremium:           "/api/v1/auth/dev_premium"
+        case .registrationOptions:  "/api/v1/auth/registration/options"
+        case .registration:         "/api/v1/auth/registration"
+        case .sessionOptions:       "/api/v1/auth/session/options"
+        case .session, .signOut:    "/api/v1/auth/session"
+        case .me, .updateMe, .deleteMe: "/api/v1/me"
+        case .exportMe:             "/api/v1/me/export"
+        case .onboarding:           "/api/v1/me/onboarding"
+        case .location:             "/api/v1/me/location"
+        case .photos:               "/api/v1/me/photos"
+        case .photo(let id):  "/api/v1/me/photos/\(id)"
+        case .orderPhotos:          "/api/v1/me/photos/order"
+        case .filters, .updateFilters: "/api/v1/me/filters"
+        case .interests:            "/api/v1/interests"
+        case .languages:            "/api/v1/languages"
+        case .deck(_, let slug):    slug.map { "/api/v1/groups/\($0)/deck" } ?? "/api/v1/deck"
+        case .like:                 "/api/v1/likes"
+        case .likesReceived:        "/api/v1/likes/received"
+        case .rewind:               "/api/v1/likes/rewind"
+        case .matches:              "/api/v1/matches"
+        case .unmatch(let id):      "/api/v1/matches/\(id)"
+        case .messages(let id, _), .sendMessage(let id): "/api/v1/matches/\(id)/messages"
+        case .markRead(let id):     "/api/v1/matches/\(id)/read"
+        case .groups, .createGroup: "/api/v1/groups"
+        case .group(let slug):      "/api/v1/groups/\(slug)"
+        case .join(let slug), .leave(let slug): "/api/v1/groups/\(slug)/membership"
+        case .members(let slug):    "/api/v1/groups/\(slug)/members"
+        case .kick(let slug, let uid): "/api/v1/groups/\(slug)/members/\(uid)"
+        case .blocks, .block:       "/api/v1/blocks"
+        case .unblock(let uid):     "/api/v1/blocks/\(uid)"
+        case .report:               "/api/v1/reports"
+        case .registerDevice:       "/api/v1/devices"
+        case .syncSubscription:     "/api/v1/subscriptions/sync"
         }
     }
 
     var queryItems: [URLQueryItem] {
         switch self {
-        case .deck(let context, let groupID):
-            var items = [URLQueryItem(name: "context", value: context.rawValue)]
-            if let groupID { items.append(URLQueryItem(name: "group_id", value: groupID)) }
-            return items
+        case .deck(let context, let slug):
+            slug == nil ? [URLQueryItem(name: "context", value: context.rawValue)] : []
+        case .messages(_, let before):
+            before.map { [URLQueryItem(name: "before", value: $0)] } ?? []
+        case .groups(let scope, let category, let query):
+            [URLQueryItem(name: "scope", value: scope.rawValue),
+             category.map { URLQueryItem(name: "category", value: $0) },
+             query.flatMap { $0.isEmpty ? nil : URLQueryItem(name: "q", value: $0) }].compactMap { $0 }
         default:
-            return []
+            []
         }
     }
 
-    /// Los catálogos se cachean; todo lo demás es estado vivo.
+    /// Los catalogos casi no cambian: se cachean. Todo lo demas es estado vivo.
     var isCacheable: Bool {
         switch self {
         case .interests, .languages: true
         default: false
         }
     }
-}
-
-enum DeckContext: String, Codable, Sendable, CaseIterable {
-    case dating, friendship, language, group
 }

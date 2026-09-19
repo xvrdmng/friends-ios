@@ -1,50 +1,56 @@
 import SwiftUI
 
-/// Tarjeta sticker: borde negro de 3 px + sombra dura desplazada, sin difuminado.
-/// Equivale a `--shadow-sticker: 4px 4px 0px 0px #000` de la web.
+/// Tarjeta sticker: borde negro de 3 px, esquinas redondeadas y sombra dura
+/// desplazada abajo a la derecha, sin difuminado.
 struct LazyCardModifier: ViewModifier {
     var backgroundColor: Color = .white
-    var cornerRadius: CGFloat = 12
+    var cornerRadius: CGFloat = 18
     var offset: CGFloat = 4
 
     func body(content: Content) -> some View {
         content
             .background(backgroundColor)
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .stroke(Color.lazyBlack, lineWidth: 3)
             )
-            .shadow(color: .lazyBlack, radius: 0, x: offset, y: offset)
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.lazyBlack)
+                    .offset(x: offset, y: offset)
+            )
     }
 }
 
-/// Botón primario en estilo toolazy: se hunde al pulsarlo, como en la web.
+/// Botón sticker: se hunde en su sombra al pulsarlo. `fillsWidth` estira la
+/// tarjeta entera, asi toda la superficie visible es pulsable.
 struct LazyButtonStyle: ButtonStyle {
     var background: Color = .lazyBlack
     var foreground: Color = .white
+    var fillsWidth = false
 
     func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed
         configuration.label
             .font(.lazySubhead)
             .textCase(.uppercase)
-            .kerning(0.7)
+            .kerning(1)
             .foregroundStyle(foreground)
-            .padding(.vertical, 14)
-            .padding(.horizontal, 26)
-            .lazyCard(backgroundColor: background, offset: configuration.isPressed ? 0 : 4)
-            .offset(
-                x: configuration.isPressed ? 4 : 0,
-                y: configuration.isPressed ? 4 : 0
-            )
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .padding(.vertical, 16)
+            .padding(.horizontal, 22)
+            .frame(maxWidth: fillsWidth ? .infinity : nil)
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .lazyCard(backgroundColor: background, cornerRadius: 18, offset: pressed ? 0 : 5)
+            .offset(x: pressed ? 5 : 0, y: pressed ? 5 : 0)
+            .animation(.easeOut(duration: 0.1), value: pressed)
     }
 }
 
 extension View {
     func lazyCard(
         backgroundColor: Color = .white,
-        cornerRadius: CGFloat = 12,
+        cornerRadius: CGFloat = 18,
         offset: CGFloat = 4
     ) -> some View {
         modifier(LazyCardModifier(
