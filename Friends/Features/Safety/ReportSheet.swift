@@ -122,6 +122,8 @@ struct BlockedUsersView: View {
     @State private var people: [Person] = []
     @State private var isLoading = true
     @State private var error: AlertMessage?
+    @State private var restored: String?
+    var onMatchRestored: () -> Void = {}
 
     var body: some View {
         Group {
@@ -140,6 +142,12 @@ struct BlockedUsersView: View {
                             AvatarView(url: person.thumbUrl, name: person.displayName, size: 44)
                             Text(person.displayName).font(.headline)
                             Spacer()
+                            // Boton a la vista: escondido solo tras el swipe no
+                            // lo encuentra nadie, y desbloquear tiene que ser
+                            // tan facil como bloquear.
+                            Button("Desbloquear") { Task { await unblock(person) } }
+                                .buttonStyle(.bordered)
+                                .font(.subheadline)
                         }
                         .swipeActions(edge: .trailing) {
                             Button("Desbloquear", systemImage: "hand.raised.slash") {
@@ -155,6 +163,13 @@ struct BlockedUsersView: View {
         .navigationTitle("Bloqueados")
         .navigationBarTitleDisplayMode(.inline)
         .errorAlert($error)
+        .alert("Volvió tu match", isPresented: Binding(get: { restored != nil },
+                                                       set: { if !$0 { restored = nil } }),
+               presenting: restored) { _ in
+            Button("Vale", role: .cancel) {}
+        } message: { name in
+            Text("\(name) vuelve a estar en tus chats, con la conversación como la dejasteis.")
+        }
         .task { await load() }
     }
 
@@ -165,8 +180,12 @@ struct BlockedUsersView: View {
 
     private func unblock(_ person: Person) async {
         do {
-            try await api.send(.unblock(userID: person.userId))
+            let response: UnblockResponse = try await api.send(.unblock(userID: person.userId))
             people.removeAll { $0.id == person.id }
+            if !response.restoredMatches.isEmpty {
+                restored = person.displayName
+                onMatchRestored()
+            }
         } catch {
             self.error = AlertMessage("No se pudo desbloquear")
         }

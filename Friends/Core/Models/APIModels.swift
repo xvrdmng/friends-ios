@@ -155,6 +155,14 @@ struct FiltersResponse: Decodable, Sendable {
 
 struct BlocksResponse: Decodable, Sendable { let blocks: [Person] }
 
+/// Al desbloquear vuelven los matches que rompio ese bloqueo, con su
+/// conversacion intacta. Puede venir vacio: si el otro te sigue bloqueando, o
+/// si el match se deshizo a mano, no vuelve nada.
+struct UnblockResponse: Decodable, Sendable {
+    let unblocked: Bool
+    let restoredMatches: [Match]
+}
+
 struct SubscriptionResponse: Decodable, Sendable {
     let premium: Bool
     let premiumUntil: Date?
