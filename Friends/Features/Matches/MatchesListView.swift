@@ -13,10 +13,19 @@ final class MatchesListViewModel {
 
     /// Nuevos: aun sin mensajes. El resto, ordenado por el ultimo mensaje.
     var newMatches: [Match] { matches.filter { $0.lastMessage == nil } }
-    var conversations: [Match] {
+
+    private var conversations: [Match] {
         matches.filter { $0.lastMessage != nil }
             .sorted { ($0.lastMessage?.createdAt ?? .distantPast) > ($1.lastMessage?.createdAt ?? .distantPast) }
     }
+
+    /// Los de siempre: citas, amistad o idiomas.
+    var directConversations: [Match] { conversations.filter { $0.group == nil } }
+
+    /// Los que nacieron dentro de un grupo. Van aparte porque el contexto
+    /// cambia de quien es esa persona: no es alguien del mazo, es alguien con
+    /// quien compartes un grupo.
+    var groupConversations: [Match] { conversations.filter { $0.group != nil } }
     var totalUnread: Int { matches.reduce(0) { $0 + $1.unreadCount } }
 
     func load() async {
@@ -34,7 +43,9 @@ final class MatchesListViewModel {
 
 /// Matches y sus chats. Un match nace con su conversacion ya creada.
 struct MatchesListView: View {
-    @State private var model = MatchesListViewModel()
+    /// Lo pone `RootView`, que es quien lleva el contador de la barra.
+    let model: MatchesListViewModel
+
     @State private var account = AccountStore.shared
     @State private var open: Match?
     @Environment(\.scenePhase) private var scenePhase
@@ -83,9 +94,14 @@ struct MatchesListView: View {
                 if !model.newMatches.isEmpty {
                     Section("Nuevos matches") { newMatchesRow }
                 }
-                if !model.conversations.isEmpty {
+                if !model.directConversations.isEmpty {
                     Section("Mensajes") {
-                        ForEach(model.conversations) { match in row(match) }
+                        ForEach(model.directConversations) { match in row(match) }
+                    }
+                }
+                if !model.groupConversations.isEmpty {
+                    Section("De tus grupos") {
+                        ForEach(model.groupConversations) { match in row(match) }
                     }
                 }
             }
@@ -121,13 +137,24 @@ struct MatchesListView: View {
             HStack(spacing: 12) {
                 AvatarView(url: match.other.thumbUrl, name: match.other.displayName)
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
+                    // En la seccion de grupos la etiqueta seria redundante tres
+                    // veces seguidas: el grupo va en la misma linea del nombre,
+                    // que es lo que distingue a esta persona de las demas.
+                    if let group = match.group {
+                        HStack(spacing: 4) {
+                            Text(match.other.displayName)
+                                .font(.headline)
+                                .lineLimit(1)
+                            Text("·").foregroundStyle(.tertiary)
+                            Text(group.name)
+                                .font(.subheadline)
+                                .foregroundStyle(Color.accentColor)
+                                .lineLimit(1)
+                        }
+                    } else {
                         Text(match.other.displayName)
                             .font(.headline)
                             .lineLimit(1)
-                        if let group = match.group {
-                            Tag(text: group.name, tint: Color.accentColor)
-                        }
                     }
                     Text(preview(match.lastMessage))
                         .font(.subheadline)

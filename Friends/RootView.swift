@@ -7,6 +7,12 @@ struct RootView: View {
     let session: SessionViewModel
 
     @State private var selection: AppTab = .date
+    /// Vive aqui, y no dentro de la pestana, para que la barra pueda llevar el
+    /// contador de mensajes sin leer estando tu en cualquier otra pestana: una
+    /// vista de `TabView` que nadie ha abierto todavia no se crea, asi que un
+    /// modelo propio de la pestana Chats no sabria nada hasta entrar en ella.
+    @State private var matches = MatchesListViewModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Los rotulos son tambien el contrato de `TabsUITests`, que busca los
     /// botones de la barra por estos nombres.
@@ -46,13 +52,25 @@ struct RootView: View {
                 GroupsView()
             }
             Tab(AppTab.chats.title, systemImage: AppTab.chats.symbol, value: AppTab.chats) {
-                MatchesListView()
+                MatchesListView(model: matches)
             }
+            .badge(matches.totalUnread)
             Tab(AppTab.profile.title, systemImage: AppTab.profile.symbol, value: AppTab.profile) {
                 ProfileView(session: session)
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        .task {
+            // Una sola vez por sesion, y no dentro del mazo: el oyente de
+            // `Transaction.updates` tiene que estar puesto desde que entras,
+            // estes en la pestana que estes, o una renovacion o una compra
+            // hecha fuera de la app no se entera nadie.
+            StoreService.shared.start()
+            await matches.load()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await matches.load() } }
+        }
     }
 }
 
