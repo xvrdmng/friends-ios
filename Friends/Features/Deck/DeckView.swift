@@ -14,7 +14,7 @@ struct DeckView: View {
     var onClose: (() -> Void)? = nil
 
     @State private var active: DeckContext
-    @State private var models: [DeckContext: DeckViewModel] = [:]
+    @State private var models = DeckModels()
     @State private var command: DeckViewModel.Decision?
     /// Una sola presentacion: apilar varios `.sheet` en la misma vista deja
     /// mudos todos menos uno.
@@ -52,10 +52,7 @@ struct DeckView: View {
     }
 
     private var model: DeckViewModel {
-        if let existing = models[active] { return existing }
-        let created = DeckViewModel(context: active, groupSlug: groupSlug, groupID: groupID)
-        DispatchQueue.main.async { models[active] = created }
-        return created
+        models.model(for: active, groupSlug: groupSlug, groupID: groupID)
     }
 
     var body: some View {
@@ -78,7 +75,6 @@ struct DeckView: View {
         .errorAlert(Binding(get: { model.error }, set: { model.error = $0 }))
         .overlay { celebration(model) }
         .task(id: active) {
-            store.start()
             await account.refresh()
             await model.load()
             await LocationService.shared.syncToServer()
@@ -337,5 +333,26 @@ struct DeckView: View {
                                  onKeepSwiping: { model.dismissMatch() })
                 .transition(.opacity)
         }
+    }
+}
+
+/// Un view model por contexto, vivo mientras viva la pantalla: al alternar
+/// Amistad | Idiomas el mazo anterior sigue donde estaba.
+///
+/// Es una clase corriente dentro de `@State`, no `@Observable`: quien dispara
+/// los redibujados es el `DeckViewModel`, y crear el que falta tiene que pasar
+/// AL MOMENTO. Antes se guardaba con un `DispatchQueue.main.async`, asi que
+/// cada redibujo anterior a ese salto devolvia un modelo recien hecho: la carga
+/// se lanzaba sobre uno y la pantalla miraba otro, y el mazo se quedaba
+/// eternamente en "Buscando gente…".
+@MainActor
+final class DeckModels {
+    private var byContext: [DeckContext: DeckViewModel] = [:]
+
+    func model(for context: DeckContext, groupSlug: String?, groupID: String?) -> DeckViewModel {
+        if let existing = byContext[context] { return existing }
+        let created = DeckViewModel(context: context, groupSlug: groupSlug, groupID: groupID)
+        byContext[context] = created
+        return created
     }
 }
