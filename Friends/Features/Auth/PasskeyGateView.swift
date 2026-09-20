@@ -38,7 +38,9 @@ struct PasskeyGateView: View {
                 // Las passkeys necesitan un dominio asociado firmado con una
                 // cuenta de Apple Developer. Mientras no la haya, esta puerta
                 // trasera deja seguir construyendo el resto de la app.
-                Button("Entrar sin passkey (dev)") {
+                // El handle va en el boton: en UAT se lanzan dos simuladores con
+                // cuentas distintas y hay que saber cual es cual de un vistazo.
+                Button("Entrar sin passkey · \(AuthViewModel.developmentHandle)") {
                     Task { await model?.signInForDevelopment() }
                 }
                 .buttonStyle(.glass)

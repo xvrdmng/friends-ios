@@ -76,11 +76,29 @@ final class AuthViewModel {
     }
 
     #if DEBUG
+    /// Cuenta con la que entra el atajo de desarrollo.
+    ///
+    /// Configurable para poder probar de verdad lo que hace falta entre DOS
+    /// personas (match, chat, bloqueo): se lanzan dos simuladores con handles
+    /// distintos. Por argumento de lanzamiento `-DevHandle u_dev2`, por la
+    /// variable de entorno `DEV_HANDLE`, o `u_dev` si no se dice nada.
+    static var developmentHandle: String {
+        let candidates = [
+            ProcessInfo.processInfo.environment["DEV_HANDLE"],
+            UserDefaults.standard.string(forKey: "DevHandle")
+        ]
+        for candidate in candidates {
+            let handle = candidate?.trimmingCharacters(in: .whitespaces) ?? ""
+            if !handle.isEmpty { return handle }
+        }
+        return "u_dev"
+    }
+
     /// Atajo de desarrollo: pide una sesion al servidor sin passkey.
     /// El endpoint no existe en produccion.
     func signInForDevelopment() async {
         await perform {
-            try await self.api.send(.devSession, body: DevSessionRequest(handle: "u_dev"))
+            try await self.api.send(.devSession, body: DevSessionRequest(handle: Self.developmentHandle))
         }
     }
     #endif
