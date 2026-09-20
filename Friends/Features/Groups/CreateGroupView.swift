@@ -117,6 +117,18 @@ struct CreateGroupView: View {
         if let response: InterestsResponse = try? await api.send(.interests) { interests = response.interests }
     }
 
+    /// La portada de camara pesa varios MB: se reduce antes de subirla.
+    private static func jpeg(from data: Data, maxSide: CGFloat = 1600) -> Data? {
+        guard let image = UIImage(data: data) else { return nil }
+        let longest = max(image.size.width, image.size.height)
+        guard longest > maxSide else { return image.jpegData(compressionQuality: 0.85) }
+        let scale = maxSide / longest
+        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+            .jpegData(compressionQuality: 0.85)
+    }
+
     private func loadCover(_ item: PhotosPickerItem?) async {
         guard let item, let data = try? await item.loadTransferable(type: Data.self) else { return }
         coverData = data
@@ -137,8 +149,21 @@ struct CreateGroupView: View {
         )
 
         do {
-            let response: GroupResponse = try await api.send(.createGroup, body: body)
-            onCreated(response.group)
+            let created: GroupResponse = try await api.send(.createGroup, body: body)
+            var group = created.group
+
+            // La portada va en una segunda peticion, multipart. Si falla, el
+            // grupo ya existe: no se pierde lo escrito, solo se queda sin foto.
+            if let coverData, let jpeg = Self.jpeg(from: coverData) {
+                if let withCover: GroupResponse = try? await api.upload(
+                    .groupCover(slug: group.slug), field: "cover", data: jpeg,
+                    filename: "portada.jpg", mimeType: "image/jpeg", fields: [:]
+                ) {
+                    group = withCover.group
+                }
+            }
+
+            onCreated(group)
             dismiss()
         } catch APIError.server(_, let message) {
             error = AlertMessage("No se pudo crear el grupo", message: message)

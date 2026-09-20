@@ -38,6 +38,7 @@ enum APIEndpoint: Sendable {
     case groups(scope: GroupScope, category: String?, query: String?)
     case createGroup
     case group(slug: String)
+    case groupCover(slug: String)
     case join(slug: String), leave(slug: String)
     case members(slug: String)
     case kick(slug: String, userID: String)
@@ -56,7 +57,7 @@ enum APIEndpoint: Sendable {
              .matches, .messages, .groups, .group, .members, .blocks:
             .get
         case .updateMe: .patch
-        case .onboarding, .orderPhotos, .updateFilters: .patch
+        case .onboarding, .orderPhotos, .updateFilters, .groupCover: .patch
         case .location: .put
         case .deleteMe, .signOut, .photo, .unmatch, .leave, .kick, .unblock: .delete
         default: .post
@@ -91,6 +92,7 @@ enum APIEndpoint: Sendable {
         case .markRead(let id):     "/api/v1/matches/\(id)/read"
         case .groups, .createGroup: "/api/v1/groups"
         case .group(let slug):      "/api/v1/groups/\(slug)"
+        case .groupCover(let slug): "/api/v1/groups/\(slug)/cover"
         case .join(let slug), .leave(let slug): "/api/v1/groups/\(slug)/membership"
         case .members(let slug):    "/api/v1/groups/\(slug)/members"
         case .kick(let slug, let uid): "/api/v1/groups/\(slug)/members/\(uid)"
