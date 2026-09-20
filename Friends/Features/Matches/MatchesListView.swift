@@ -48,11 +48,9 @@ struct MatchesListView: View {
         .task { await model.load(); await account.refresh() }
         .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await model.load() } } }
         .fullScreenCover(item: $open, onDismiss: { Task { await model.load() } }) { match in
-            if let myID = account.userID {
-                ChatView(match: match, myID: myID) { unmatched in
-                    if unmatched { model.remove(id: match.id) }
-                    open = nil
-                }
+            ChatLauncher(match: match) { unmatched in
+                if unmatched { model.remove(id: match.id) }
+                open = nil
             }
         }
     }

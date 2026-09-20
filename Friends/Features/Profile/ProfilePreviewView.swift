@@ -9,17 +9,35 @@ struct ProfilePreviewView: View {
     @State private var card: DeckCard?
     @State private var isLoading = true
 
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
         Group {
             if let card {
+                // CardDetailView trae su propia barra con "Listo".
                 CardDetailView(card: card, showsSafetyActions: false)
-            } else if isLoading {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ContentUnavailableView {
-                    Label("Aún no hay nada que enseñar", systemImage: "person.crop.circle.badge.questionmark")
-                } description: {
-                    Text("Completa tu perfil y sube fotos para verte como te ven.")
+                // Mientras carga, y si no hay nada que enseñar, la pantalla
+                // necesita su propia salida: si no, se queda sin boton.
+                NavigationStack {
+                    Group {
+                        if isLoading {
+                            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else {
+                            ContentUnavailableView {
+                                Label("Aún no hay nada que enseñar",
+                                      systemImage: "person.crop.circle.badge.questionmark")
+                            } description: {
+                                Text("Completa tu perfil y sube fotos para verte como te ven.")
+                            }
+                        }
+                    }
+                    .background(Color(.systemGroupedBackground))
+                    .navigationTitle("Cómo te ven")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) { Button("Listo") { dismiss() } }
+                    }
                 }
             }
         }

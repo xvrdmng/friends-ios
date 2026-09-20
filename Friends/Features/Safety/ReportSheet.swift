@@ -124,6 +124,7 @@ struct BlockedUsersView: View {
     @State private var error: AlertMessage?
     @State private var restored: String?
     var onMatchRestored: () -> Void = {}
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         Group {
@@ -162,6 +163,11 @@ struct BlockedUsersView: View {
         }
         .navigationTitle("Bloqueados")
         .navigationBarTitleDisplayMode(.inline)
+        // Sin esto la pantalla no tenia salida: se abre en una hoja y solo se
+        // podia cerrar arrastrandola, cosa que no adivina nadie.
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) { Button("Listo") { dismiss() } }
+        }
         .errorAlert($error)
         .alert("Volvió tu match", isPresented: Binding(get: { restored != nil },
                                                        set: { if !$0 { restored = nil } }),

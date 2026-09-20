@@ -114,9 +114,7 @@ struct DeckView: View {
             }
         }
         .fullScreenCover(item: $chatMatch) { match in
-            if let myID = account.userID {
-                ChatView(match: match, myID: myID) { _ in chatMatch = nil }
-            }
+            ChatLauncher(match: match) { _ in chatMatch = nil }
         }
     }
 
