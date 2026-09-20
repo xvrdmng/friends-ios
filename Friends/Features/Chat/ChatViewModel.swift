@@ -126,21 +126,6 @@ final class ChatViewModel {
         }
     }
 
-    func sendImage(_ data: Data) {
-        let clientID = UUID().uuidString
-        Task {
-            do {
-                let response: MessageResponse = try await api.upload(
-                    .sendMessage(matchID: match.id), field: "image", data: data,
-                    filename: "foto.jpg", mimeType: "image/jpeg", fields: ["client_id": clientID]
-                )
-                reconcile(response.message)
-            } catch {
-                errorMessage = "No se pudo enviar la foto."
-            }
-        }
-    }
-
     // MARK: - Tiempo real
 
     private func handle(_ event: CableEvent) {

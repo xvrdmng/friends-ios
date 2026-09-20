@@ -1,4 +1,3 @@
-import PhotosUI
 import SwiftUI
 
 /// Conversacion. Se presenta a pantalla completa para quedar por encima de la
@@ -38,7 +37,6 @@ struct ChatView: View {
             }
         }
     }
-    @State private var photoItem: PhotosPickerItem?
     @FocusState private var focused: Bool
     @Environment(\.scenePhase) private var scenePhase
 
@@ -80,7 +78,6 @@ struct ChatView: View {
         .task { await model.start() }
         .onDisappear { model.stop() }
         .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await model.refresh() } } }
-        .onChange(of: photoItem) { _, item in Task { await loadPhoto(item) } }
         .sheet(item: $report) { target in
             ReportSheet(target: target) { didBlock in if didBlock { onClose(true) } }
         }
@@ -272,11 +269,6 @@ struct ChatView: View {
 
     private var inputBar: some View {
         HStack(alignment: .bottom, spacing: 10) {
-            PhotosPicker(selection: $photoItem, matching: .images) {
-                PhotoPickerLabel()
-            }
-            .accessibilityLabel("Enviar foto")
-
             TextField("Mensaje", text: Bindable(model).draft, axis: .vertical)
                 .lineLimit(1...5)
                 .focused($focused)
@@ -296,24 +288,5 @@ struct ChatView: View {
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background(.bar)
-    }
-
-    private func loadPhoto(_ item: PhotosPickerItem?) async {
-        guard let item, let data = try? await item.loadTransferable(type: Data.self),
-              let image = UIImage(data: data), let jpeg = image.jpegData(compressionQuality: 0.8) else { return }
-        photoItem = nil
-        model.sendImage(jpeg)
-    }
-}
-
-/// La etiqueta de `PhotosPicker` no esta aislada al main actor, asi que va en
-/// su propia vista: con concurrencia estricta, meter aqui un modificador
-/// aislado no compila.
-private struct PhotoPickerLabel: View {
-    var body: some View {
-        Image(systemName: "photo")
-            .font(.headline)
-            .frame(width: 34, height: 34)
-            .foregroundStyle(Color.accentColor)
     }
 }
