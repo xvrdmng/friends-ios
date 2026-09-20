@@ -10,8 +10,34 @@ struct ChatView: View {
 
     @State private var model: ChatViewModel
     @State private var report: ReportTarget?
-    @State private var confirmUnmatch = false
-    @State private var confirmBlock = false
+    @State private var confirm: ChatConfirm?
+
+    /// Un solo dialogo: dos `.confirmationDialog` en la misma vista se anulan.
+    private enum ChatConfirm: Identifiable {
+        case unmatch, block
+        var id: Self { self }
+
+        func title(_ name: String) -> String {
+            switch self {
+            case .unmatch: "¿Deshacer el match con \(name)?"
+            case .block:   "¿Bloquear a \(name)?"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .unmatch: "La conversación se cerrará para los dos."
+            case .block:   "No podrán verse ni escribirse."
+            }
+        }
+
+        var button: String {
+            switch self {
+            case .unmatch: "Deshacer match"
+            case .block:   "Bloquear"
+            }
+        }
+    }
     @State private var photoItem: PhotosPickerItem?
     @FocusState private var focused: Bool
     @Environment(\.scenePhase) private var scenePhase
@@ -43,8 +69,8 @@ struct ChatView: View {
                             report = ReportTarget(kind: .user, id: match.other.userId,
                                                   userID: match.other.userId, displayName: match.other.displayName)
                         }
-                        Button("Bloquear", systemImage: "hand.raised", role: .destructive) { confirmBlock = true }
-                        Button("Deshacer match", systemImage: "heart.slash", role: .destructive) { confirmUnmatch = true }
+                        Button("Bloquear", systemImage: "hand.raised", role: .destructive) { confirm = .block }
+                        Button("Deshacer match", systemImage: "heart.slash", role: .destructive) { confirm = .unmatch }
                     } label: {
                         Label("Más opciones", systemImage: "ellipsis")
                     }
@@ -58,16 +84,21 @@ struct ChatView: View {
         .sheet(item: $report) { target in
             ReportSheet(target: target) { didBlock in if didBlock { onClose(true) } }
         }
-        .confirmationDialog("¿Deshacer el match con \(match.other.displayName)?",
-                            isPresented: $confirmUnmatch, titleVisibility: .visible) {
-            Button("Deshacer match", role: .destructive) { Task { if await model.unmatch() { onClose(true) } } }
-        } message: { Text("La conversación se cerrará para los dos.") }
-        .confirmationDialog("¿Bloquear a \(match.other.displayName)?",
-                            isPresented: $confirmBlock, titleVisibility: .visible) {
-            Button("Bloquear", role: .destructive) {
-                Task { if await SafetyActions.block(userID: match.other.userId) { onClose(true) } }
+        .confirmationDialog(confirm?.title(match.other.displayName) ?? "",
+                            isPresented: Binding(get: { confirm != nil },
+                                                 set: { if !$0 { confirm = nil } }),
+                            titleVisibility: .visible,
+                            presenting: confirm) { action in
+            Button(action.button, role: .destructive) {
+                switch action {
+                case .unmatch: Task { if await model.unmatch() { onClose(true) } }
+                case .block:   Task { if await SafetyActions.block(userID: match.other.userId) { onClose(true) } }
+                }
             }
-        } message: { Text("No podrán verse ni escribirse.") }
+            Button("Cancelar", role: .cancel) {}
+        } message: { action in
+            Text(action.message)
+        }
     }
 
     /// El titulo lleva la foto y el estado "escribiendo…", que el titulo de

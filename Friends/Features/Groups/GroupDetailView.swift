@@ -11,6 +11,7 @@ struct GroupDetailView: View {
     @State private var showDeck = false
     @State private var confirmLeave = false
     @State private var askInviteCode = false
+    // (el dialogo de expulsar comparte presentacion con el de salir)
     @State private var inviteCode = ""
     @State private var report: ReportTarget?
     @State private var kickTarget: Person?
@@ -93,18 +94,21 @@ struct GroupDetailView: View {
             Button("Entrar") { Task { await join(code: inviteCode) } }
             Button("Cancelar", role: .cancel) {}
         } message: { Text("Pide el código a quien te invitó.") }
-        .confirmationDialog("¿Salir de \(current.name)?", isPresented: $confirmLeave, titleVisibility: .visible) {
-            Button("Salir del grupo", role: .destructive) {
-                Task { if await model.leave() { onLeft(current); onClose() } }
-            }
-        } message: { Text("Perderás los matches del grupo que aún no tengan conversación.") }
-        .confirmationDialog("¿Expulsar a \(kickTarget?.displayName ?? "")?",
-                            isPresented: Binding(get: { kickTarget != nil },
-                                                 set: { if !$0 { kickTarget = nil } }),
+        .confirmationDialog(confirmLeave ? "¿Salir de \(current.name)?"
+                                         : "¿Expulsar a \(kickTarget?.displayName ?? "")?",
+                            isPresented: Binding(get: { confirmLeave || kickTarget != nil },
+                                                 set: { if !$0 { confirmLeave = false; kickTarget = nil } }),
                             titleVisibility: .visible) {
-            Button("Expulsar", role: .destructive) {
-                if let person = kickTarget { Task { await model.kick(person) } }
+            if confirmLeave {
+                Button("Salir del grupo", role: .destructive) {
+                    Task { if await model.leave() { onLeft(current); onClose() } }
+                }
+            } else if let person = kickTarget {
+                Button("Expulsar", role: .destructive) { Task { await model.kick(person) } }
             }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            if confirmLeave { Text("Perderás los matches del grupo que aún no tengan conversación.") }
         }
     }
 

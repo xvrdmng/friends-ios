@@ -7,18 +7,58 @@ struct ProfileView: View {
     @State private var account = AccountStore.shared
     @State private var store = StoreService.shared
     @State private var likesReceived: ReceivedLikesResponse?
-    @State private var showEdit = false
-    @State private var showPhotos = false
-    @State private var showFilters = false
-    @State private var showLanguages = false
-    @State private var showBlocked = false
-    @State private var showPreview = false
-    @State private var paywallReason: PaywallReason?
-    @State private var confirmSignOut = false
-    @State private var confirmDelete = false
     @State private var isDeleting = false
-    @State private var exportURL: URL?
     @State private var error: AlertMessage?
+
+    /// Una sola presentacion, no una por pantalla: SwiftUI solo respeta UN
+    /// `.sheet` por vista, y apilar ocho dejaba mudos casi todos los botones.
+    @State private var sheet: Sheet?
+    @State private var confirm: AccountAction?
+
+    private enum Sheet: Identifiable {
+        case edit, photos, filters, languages, preview, blocked
+        case export(URL)
+        case paywall(PaywallReason)
+
+        var id: String {
+            switch self {
+            case .edit: "edit"
+            case .photos: "photos"
+            case .filters: "filters"
+            case .languages: "languages"
+            case .preview: "preview"
+            case .blocked: "blocked"
+            case .export(let url): "export:\(url.absoluteString)"
+            case .paywall(let reason): "paywall:\(reason)"
+            }
+        }
+    }
+
+    private enum AccountAction: Identifiable {
+        case signOut, delete
+        var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .signOut: "¿Cerrar sesión?"
+            case .delete:  "¿Borrar tu cuenta?"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .signOut: "Tu cuenta y tus datos se quedan guardados. Volverás a entrar con tu passkey."
+            case .delete:  "Desapareces al instante de la app. Tus datos se borran del todo a los 30 días."
+            }
+        }
+
+        var button: String {
+            switch self {
+            case .signOut: "Cerrar sesión"
+            case .delete:  "Borrar mi cuenta"
+            }
+        }
+    }
 
     private var profile: MeResponse.Profile? { account.me?.profile ?? session.me?.profile }
     private var photos: [PhotoItem] { account.me?.photos ?? [] }
@@ -39,31 +79,38 @@ struct ProfileView: View {
             .refreshable { await reload() }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Editar") { showEdit = true }
+                    Button("Editar") { sheet = .edit }
                 }
             }
         }
         .errorAlert($error)
         .task { await reload() }
-        .sheet(isPresented: $showEdit) { EditProfileView { Task { await reload() } } }
-        .sheet(isPresented: $showPhotos) { PhotosManagerView { Task { await reload() } } }
-        .sheet(isPresented: $showFilters) { FiltersView() }
-        .sheet(isPresented: $showLanguages) { LanguagesEditorView() }
-        .sheet(isPresented: $showPreview) { ProfilePreviewView(me: account.me) }
-        .sheet(isPresented: $showBlocked) { NavigationStack { BlockedUsersView() } }
-        .sheet(item: $exportURL) { url in ShareSheet(url: url) }
-        .sheet(item: $paywallReason) { reason in PaywallView(reason: reason) }
-        .confirmationDialog("¿Cerrar sesión?", isPresented: $confirmSignOut, titleVisibility: .visible) {
-            Button("Cerrar sesión", role: .destructive) { Task { await session.signOut() } }
-            Button("Cancelar", role: .cancel) {}
-        } message: {
-            Text("Tu cuenta y tus datos se quedan guardados. Volverás a entrar con tu passkey.")
+        .sheet(item: $sheet) { which in
+            switch which {
+            case .edit:      EditProfileView { Task { await reload() } }
+            case .photos:    PhotosManagerView { Task { await reload() } }
+            case .filters:   FiltersView()
+            case .languages: LanguagesEditorView()
+            case .preview:   ProfilePreviewView(me: account.me)
+            case .blocked:   NavigationStack { BlockedUsersView() }
+            case .export(let url):     ShareSheet(url: url)
+            case .paywall(let reason): PaywallView(reason: reason)
+            }
         }
-        .confirmationDialog("¿Borrar tu cuenta?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Borrar mi cuenta", role: .destructive) { Task { await deleteAccount() } }
+        .confirmationDialog(confirm?.title ?? "",
+                            isPresented: Binding(get: { confirm != nil },
+                                                 set: { if !$0 { confirm = nil } }),
+                            titleVisibility: .visible,
+                            presenting: confirm) { action in
+            Button(action.button, role: .destructive) {
+                switch action {
+                case .signOut: Task { await session.signOut() }
+                case .delete:  Task { await deleteAccount() }
+                }
+            }
             Button("Cancelar", role: .cancel) {}
-        } message: {
-            Text("Desapareces al instante de la app. Tus datos se borran del todo a los 30 días.")
+        } message: { action in
+            Text(action.message)
         }
     }
 
@@ -88,7 +135,7 @@ struct ProfileView: View {
     }
 
     private var photoStrip: some View {
-        Button { showPhotos = true } label: {
+        Button { sheet = .photos } label: {
             HStack(spacing: 10) {
                 ForEach(photos.prefix(4)) { photo in
                     RemoteImage(url: photo.thumbURL)
@@ -125,7 +172,7 @@ struct ProfileView: View {
                         .foregroundStyle(.yellow)
                 }
             } else {
-                Button { paywallReason = .generic } label: {
+                Button { sheet = .paywall(.generic) } label: {
                     LabeledContent {
                         Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)
                     } label: {
@@ -151,7 +198,7 @@ struct ProfileView: View {
         if let likes = likesReceived, likes.count > 0 {
             Section {
                 Button {
-                    if !likes.premium { paywallReason = .likesReceived }
+                    if !likes.premium { sheet = .paywall(.likesReceived) }
                 } label: {
                     LabeledContent {
                         if !likes.premium {
@@ -225,18 +272,18 @@ struct ProfileView: View {
 
     private var settingsSection: some View {
         Section("Ajustes") {
-            Button("Ver cómo te ven", systemImage: "eye") { showPreview = true }
-            Button("Filtros de búsqueda", systemImage: "line.3.horizontal.decrease") { showFilters = true }
-            Button("Tus idiomas", systemImage: "character.bubble") { showLanguages = true }
-            Button("Cuentas bloqueadas", systemImage: "hand.raised") { showBlocked = true }
+            Button("Ver cómo te ven", systemImage: "eye") { sheet = .preview }
+            Button("Filtros de búsqueda", systemImage: "line.3.horizontal.decrease") { sheet = .filters }
+            Button("Tus idiomas", systemImage: "character.bubble") { sheet = .languages }
+            Button("Cuentas bloqueadas", systemImage: "hand.raised") { sheet = .blocked }
         }
     }
 
     private var accountSection: some View {
         Section("Cuenta") {
             Button("Descargar mis datos", systemImage: "square.and.arrow.down") { Task { await export() } }
-            Button("Cerrar sesión", systemImage: "rectangle.portrait.and.arrow.right") { confirmSignOut = true }
-            Button("Borrar mi cuenta", systemImage: "trash", role: .destructive) { confirmDelete = true }
+            Button("Cerrar sesión", systemImage: "rectangle.portrait.and.arrow.right") { confirm = .signOut }
+            Button("Borrar mi cuenta", systemImage: "trash", role: .destructive) { confirm = .delete }
                 .disabled(isDeleting)
         }
     }
@@ -254,7 +301,7 @@ struct ProfileView: View {
             let data: Data = try await APIClient.shared.sendRaw(.exportMe)
             let url = URL.temporaryDirectory.appending(path: "friends-datos.json")
             try data.write(to: url, options: .atomic)
-            exportURL = url
+            sheet = .export(url)
         } catch {
             self.error = AlertMessage("No se pudieron descargar tus datos")
         }

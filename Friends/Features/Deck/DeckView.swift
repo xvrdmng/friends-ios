@@ -16,12 +16,27 @@ struct DeckView: View {
     @State private var active: DeckContext
     @State private var models: [DeckContext: DeckViewModel] = [:]
     @State private var command: DeckViewModel.Decision?
-    @State private var detail: DeckCard?
-    @State private var report: ReportTarget?
-    @State private var paywallReason: PaywallReason?
-    @State private var showFilters = false
-    @State private var showLanguages = false
+    /// Una sola presentacion: apilar varios `.sheet` en la misma vista deja
+    /// mudos todos menos uno.
+    @State private var sheet: Sheet?
     @State private var chatMatch: Match?
+
+    private enum Sheet: Identifiable {
+        case detail(DeckCard)
+        case report(ReportTarget)
+        case filters, languages
+        case paywall(PaywallReason)
+
+        var id: String {
+            switch self {
+            case .detail(let card):    "detail:\(card.userId)"
+            case .report(let target):  "report:\(target.id)"
+            case .filters:             "filters"
+            case .languages:           "languages"
+            case .paywall(let reason): "paywall:\(reason)"
+            }
+        }
+    }
     @State private var account = AccountStore.shared
     @State private var store = StoreService.shared
     @State private var locationService = LocationService.shared
@@ -72,27 +87,32 @@ struct DeckView: View {
             if phase == .active { Task { await LocationService.shared.syncToServer() } }
         }
         .onChange(of: model.showPaywall) { _, show in
-            if show { paywallReason = .likeLimit; model.showPaywall = false }
+            if show { sheet = .paywall(.likeLimit); model.showPaywall = false }
         }
-        .sheet(item: $detail) { card in
-            CardDetailView(
-                card: card,
-                onReport: {
-                    detail = nil
-                    report = ReportTarget(kind: .user, id: card.userId, userID: card.userId, displayName: card.displayName)
-                },
-                onBlock: {
-                    detail = nil
-                    Task { if await SafetyActions.block(userID: card.userId) { model.remove(userID: card.userId) } }
-                }
-            )
+        .sheet(item: $sheet) { which in
+            switch which {
+            case .detail(let card):
+                CardDetailView(
+                    card: card,
+                    onReport: {
+                        sheet = .report(ReportTarget(kind: .user, id: card.userId,
+                                                     userID: card.userId, displayName: card.displayName))
+                    },
+                    onBlock: {
+                        sheet = nil
+                        Task { if await SafetyActions.block(userID: card.userId) { model.remove(userID: card.userId) } }
+                    }
+                )
+            case .report(let target):
+                ReportSheet(target: target) { didBlock in if didBlock { model.remove(userID: target.id) } }
+            case .filters:
+                FiltersView { Task { await model.load(reset: true) } }
+            case .languages:
+                LanguagesEditorView { Task { await model.load(reset: true) } }
+            case .paywall(let reason):
+                PaywallView(reason: reason)
+            }
         }
-        .sheet(item: $report) { target in
-            ReportSheet(target: target) { didBlock in if didBlock { model.remove(userID: target.id) } }
-        }
-        .sheet(isPresented: $showFilters) { FiltersView { Task { await model.load(reset: true) } } }
-        .sheet(isPresented: $showLanguages) { LanguagesEditorView { Task { await model.load(reset: true) } } }
-        .sheet(item: $paywallReason) { reason in PaywallView(reason: reason) }
         .fullScreenCover(item: $chatMatch) { match in
             if let myID = account.userID {
                 ChatView(match: match, myID: myID) { _ in chatMatch = nil }
@@ -117,7 +137,7 @@ struct DeckView: View {
                     .foregroundStyle(.yellow)
                     .accessibilityLabel("Cuenta premium")
             } else if let left = model.likesLeft {
-                Button { paywallReason = .likeLimit } label: {
+                Button { sheet = .paywall(.likeLimit) } label: {
                     Label("\(left)", systemImage: "heart")
                         .labelStyle(.titleAndIcon)
                         .font(.footnote)
@@ -128,7 +148,7 @@ struct DeckView: View {
 
         if active != .group {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Filtros", systemImage: "line.3.horizontal.decrease") { showFilters = true }
+                Button("Filtros", systemImage: "line.3.horizontal.decrease") { sheet = .filters }
             }
         }
     }
@@ -157,7 +177,7 @@ struct DeckView: View {
                     if index == 0 {
                         DraggableCard(card: card, command: $command,
                                       onDecision: { model.decide($0) },
-                                      onInfo: { detail = card })
+                                      onInfo: { sheet = .detail(card) })
                             .id(card.id).transition(.identity)
                     } else {
                         ProfileCardView(card: card)
@@ -200,7 +220,7 @@ struct DeckView: View {
             Button("Actualizar") { Task { await model.load(reset: true) } }
                 .buttonStyle(.glassProminent)
             if active != .group {
-                Button("Ajustar filtros") { showFilters = true }
+                Button("Ajustar filtros") { sheet = .filters }
             }
         }
     }
@@ -249,7 +269,7 @@ struct DeckView: View {
             } description: {
                 Text("Emparejamos a quien habla lo que tú aprendes y aprende lo que tú hablas.")
             } actions: {
-                Button("Elegir idiomas") { showLanguages = true }
+                Button("Elegir idiomas") { sheet = .languages }
                     .buttonStyle(.glassProminent)
             }
 
@@ -284,11 +304,11 @@ struct DeckView: View {
             HStack(spacing: 16) {
                 actionButton("arrow.uturn.backward", tint: .yellow, size: 50,
                              label: "Deshacer", isEnabled: model.canRewind) {
-                    if store.isPremium { Task { await model.rewind() } } else { paywallReason = .rewind }
+                    if store.isPremium { Task { await model.rewind() } } else { sheet = .paywall(.rewind) }
                 }
                 actionButton("xmark", tint: .red, size: 66, label: "No me interesa") { command = .pass }
                 actionButton("star.fill", tint: .cyan, size: 50, label: "Superlike") {
-                    if store.isPremium { command = .superlike } else { paywallReason = .superlike }
+                    if store.isPremium { command = .superlike } else { sheet = .paywall(.superlike) }
                 }
                 actionButton("heart.fill", tint: .green, size: 66, label: "Me gusta") { command = .like }
             }
