@@ -39,6 +39,16 @@ final class MatchesListViewModel {
     }
 
     func remove(id: String) { matches.removeAll { $0.id == id } }
+
+    func match(id: String) -> Match? { matches.first { $0.id == id } }
+
+    /// Para abrir la conversacion que venia en un aviso push: puede que ese
+    /// match aun no este en la lista (llego mientras la app estaba cerrada).
+    func findOrLoad(id: String) async -> Match? {
+        if let existing = match(id: id) { return existing }
+        await load()
+        return match(id: id)
+    }
 }
 
 /// Matches y sus chats. Un match nace con su conversacion ya creada.
@@ -47,6 +57,7 @@ struct MatchesListView: View {
     let model: MatchesListViewModel
 
     @State private var account = AccountStore.shared
+    @State private var push = PushService.shared
     @State private var open: Match?
     @Environment(\.scenePhase) private var scenePhase
 
@@ -56,14 +67,22 @@ struct MatchesListView: View {
                 .navigationTitle("Chats")
                 .refreshable { await model.load() }
         }
-        .task { await model.load(); await account.refresh() }
+        .task { await model.load(); await account.refresh(); await openPendingPush() }
         .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await model.load() } } }
+        .onChange(of: push.pendingMatchID) { Task { await openPendingPush() } }
         .fullScreenCover(item: $open, onDismiss: { Task { await model.load() } }) { match in
             ChatLauncher(match: match) { unmatched in
                 if unmatched { model.remove(id: match.id) }
                 open = nil
             }
         }
+    }
+
+    /// Abre la conversacion que traia el aviso que se toco.
+    private func openPendingPush() async {
+        guard let id = push.pendingMatchID else { return }
+        push.pendingMatchID = nil
+        if let match = await model.findOrLoad(id: id) { open = match }
     }
 
     @ViewBuilder

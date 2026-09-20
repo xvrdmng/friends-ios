@@ -2,6 +2,9 @@ import SwiftUI
 
 @main
 struct FriendsApp: App {
+    /// APNs entrega el token y los toques de los avisos por el delegado de
+    /// UIKit; SwiftUI no tiene por donde recibirlos.
+    @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
     @State private var session = SessionViewModel()
 
     var body: some Scene {
@@ -70,6 +73,9 @@ final class SessionViewModel {
 
     /// Revoca el token en el servidor (mejor esfuerzo) y lo borra del Keychain.
     func signOut() async {
+        // Primero el push: si no, este telefono seguiria recibiendo los avisos
+        // de una cuenta que ya no esta dentro.
+        await PushService.shared.unregister()
         try? await APIClient.shared.send(.signOut)
         await SessionStore.shared.clear()
         UserDefaults.standard.removeObject(forKey: Self.onboardedKey)

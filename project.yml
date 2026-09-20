@@ -29,6 +29,7 @@ targets:
           API_BASE_URL: http://localhost:3000
         Release:
           API_BASE_URL: https://api.toolazy.cl
+          CODE_SIGN_ENTITLEMENTS: Friends/Friends.Release.entitlements
       base:
         # Sin esto, Color.accentColor cae en el azul del sistema y el tinte de
         # marca no llega ni a la barra de pestanas ni a los controles estandar.
@@ -38,6 +39,9 @@ targets:
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1"     # solo iPhone
+        # Las entitlements van por configuracion: `aps-environment` tiene que
+        # decir "production" en la build que se sube, o los avisos no llegan a
+        # nadie fuera de Xcode.
         CODE_SIGN_ENTITLEMENTS: Friends/Friends.entitlements
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: Friends/Info.plist

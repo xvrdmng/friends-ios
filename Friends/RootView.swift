@@ -12,6 +12,7 @@ struct RootView: View {
     /// vista de `TabView` que nadie ha abierto todavia no se crea, asi que un
     /// modelo propio de la pestana Chats no sabria nada hasta entrar en ella.
     @State private var matches = MatchesListViewModel()
+    @State private var push = PushService.shared
     @Environment(\.scenePhase) private var scenePhase
 
     /// Los rotulos son tambien el contrato de `TabsUITests`, que busca los
@@ -66,10 +67,25 @@ struct RootView: View {
             // estes en la pestana que estes, o una renovacion o una compra
             // hecha fuera de la app no se entera nadie.
             StoreService.shared.start()
+            // Si ya diste permiso, el token se renueva sin preguntar nada:
+            // APNs lo puede cambiar (restaurar el telefono, reinstalar).
+            await push.registerIfAlreadyAllowed()
             await matches.load()
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await matches.load() } }
+            guard phase == .active else { return }
+            Task {
+                await matches.load()
+                await push.registerIfAlreadyAllowed()
+            }
+        }
+        // El globo del icono cuenta lo mismo que el de la pestana.
+        .onChange(of: matches.totalUnread, initial: true) { _, count in
+            push.setBadge(count)
+        }
+        // Un aviso tocado desde fuera de Chats tiene que traerte a Chats.
+        .onChange(of: push.pendingMatchID) { _, id in
+            if id != nil { selection = .chats }
         }
     }
 }

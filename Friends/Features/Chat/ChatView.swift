@@ -75,8 +75,16 @@ struct ChatView: View {
                 }
             }
         }
-        .task { await model.start() }
-        .onDisappear { model.stop() }
+        .task {
+            // Sin esto, estando dentro de la conversacion te salta igual el
+            // banner del mensaje que acabas de ver llegar.
+            PushService.shared.visibleMatchID = match.id
+            await model.start()
+        }
+        .onDisappear {
+            if PushService.shared.visibleMatchID == match.id { PushService.shared.visibleMatchID = nil }
+            model.stop()
+        }
         // El view model ya apuntaba los fallos —cargar, deshacer el match, un
         // mensaje demasiado largo— pero nadie los ensenaba.
         .alert("No se pudo",

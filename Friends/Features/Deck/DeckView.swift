@@ -40,6 +40,7 @@ struct DeckView: View {
     @State private var account = AccountStore.shared
     @State private var store = StoreService.shared
     @State private var locationService = LocationService.shared
+    @State private var push = PushService.shared
     @Environment(\.scenePhase) private var scenePhase
 
     init(context: DeckContext, groupSlug: String? = nil, groupID: String? = nil, groupName: String? = nil, onClose: (() -> Void)? = nil) {
@@ -293,6 +294,14 @@ struct DeckView: View {
 
     // MARK: - Acciones
 
+    /// El permiso de avisos se pide en el primer match y no al arrancar: es el
+    /// momento en el que se entiende para que sirve, y en el que decir que si
+    /// tiene sentido. Si ya se decidio, esto no hace nada.
+    private func askForPush() {
+        guard push.access == .notDetermined else { return }
+        Task { await push.requestAccess() }
+    }
+
     private func actions(_ model: DeckViewModel) -> some View {
         GlassEffectContainer(spacing: 18) {
             HStack(spacing: 16) {
@@ -329,8 +338,8 @@ struct DeckView: View {
     private func celebration(_ model: DeckViewModel) -> some View {
         if let match = model.newMatch {
             MatchCelebrationView(match: match, myPhoto: account.firstPhotoURL, myName: account.displayName,
-                                 onMessage: { model.dismissMatch(); chatMatch = match },
-                                 onKeepSwiping: { model.dismissMatch() })
+                                 onMessage: { model.dismissMatch(); chatMatch = match; askForPush() },
+                                 onKeepSwiping: { model.dismissMatch(); askForPush() })
                 .transition(.opacity)
         }
     }

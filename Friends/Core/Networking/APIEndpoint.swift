@@ -46,7 +46,7 @@ enum APIEndpoint: Sendable {
     // Seguridad
     case blocks, block, unblock(userID: String)
     case report
-    case registerDevice
+    case registerDevice, unregisterDevice(token: String)
 
     // Premium
     case syncSubscription
@@ -59,7 +59,7 @@ enum APIEndpoint: Sendable {
         case .updateMe: .patch
         case .onboarding, .orderPhotos, .updateFilters, .groupCover: .patch
         case .location: .put
-        case .deleteMe, .signOut, .photo, .unmatch, .leave, .kick, .unblock: .delete
+        case .deleteMe, .signOut, .photo, .unmatch, .leave, .kick, .unblock, .unregisterDevice: .delete
         default: .post
         }
     }
@@ -100,6 +100,7 @@ enum APIEndpoint: Sendable {
         case .unblock(let uid):     "/api/v1/blocks/\(uid)"
         case .report:               "/api/v1/reports"
         case .registerDevice:       "/api/v1/devices"
+        case .unregisterDevice(let token): "/api/v1/devices/\(token)"
         case .syncSubscription:     "/api/v1/subscriptions/sync"
         }
     }

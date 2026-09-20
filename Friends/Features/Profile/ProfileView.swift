@@ -6,6 +6,7 @@ struct ProfileView: View {
 
     @State private var account = AccountStore.shared
     @State private var store = StoreService.shared
+    @State private var push = PushService.shared
     @State private var likesReceived: ReceivedLikesResponse?
     @State private var isDeleting = false
     @State private var isRestoring = false
@@ -274,10 +275,33 @@ struct ProfileView: View {
 
     private var settingsSection: some View {
         Section("Ajustes") {
+            notificationsRow
             Button("Ver cómo te ven", systemImage: "eye") { sheet = .preview }
             Button("Filtros de búsqueda", systemImage: "line.3.horizontal.decrease") { sheet = .filters }
             Button("Tus idiomas", systemImage: "character.bubble") { sheet = .languages }
             Button("Cuentas bloqueadas", systemImage: "hand.raised") { sheet = .blocked }
+        }
+    }
+
+    /// Quien dijo que no en el primer match no tiene otra forma de volver
+    /// atras: el sistema ya no vuelve a preguntar.
+    @ViewBuilder
+    private var notificationsRow: some View {
+        switch push.access {
+        case .granted:
+            LabeledContent {
+                Text("Activadas").foregroundStyle(.secondary)
+            } label: {
+                Label("Avisos", systemImage: "bell.badge")
+            }
+        case .notDetermined:
+            Button("Avisarme de matches y mensajes", systemImage: "bell") {
+                Task { await push.requestAccess() }
+            }
+        case .denied:
+            Button("Activar avisos en Ajustes", systemImage: "bell.slash") {
+                if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+            }
         }
     }
 
@@ -314,6 +338,7 @@ struct ProfileView: View {
     // MARK: - Datos
 
     private func reload() async {
+        await push.refreshAccess()
         await account.refresh()
         likesReceived = try? await APIClient.shared.send(.likesReceived)
     }
