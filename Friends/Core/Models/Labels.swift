@@ -20,3 +20,11 @@ enum Labels {
         return km == 0 ? "a menos de 1 km" : "a \(km) km"
     }
 }
+
+/// Las dos paginas que Apple exige tener a la vista en una app de suscripcion.
+/// Estan aqui, y no escritas a mano en cada pantalla, para que el paywall y el
+/// perfil no puedan acabar apuntando a sitios distintos.
+enum LegalLinks {
+    static let terms = URL(string: "https://toolazy.cl/friends/terminos")!
+    static let privacy = URL(string: "https://toolazy.cl/friends/privacidad")!
+}

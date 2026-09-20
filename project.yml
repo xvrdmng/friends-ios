@@ -8,6 +8,9 @@ options:
 
 settings:
   base:
+    # La app esta escrita en espanol de punta a punta. Sin esto el bundle se
+    # declara en ingles y el sistema la trata como si tuviera traduccion.
+    DEVELOPMENT_LANGUAGE: es
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
     DEVELOPMENT_TEAM: ""   # rellenar con el Team ID de Apple Developer
@@ -39,8 +42,14 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: Friends/Info.plist
     info:
+      # OJO: xcodegen REESCRIBE Friends/Info.plist desde aqui en cada
+      # `xcodegen generate`. Editarlo a mano no sirve de nada.
       path: Friends/Info.plist
       properties:
+        # Sin esto xcodegen escribe "1.0" fijo, y subir la version arriba no
+        # llegaba al build que se manda a App Store Connect.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         # El launch screen debe llevar el color de marca: por defecto es blanco,
         # y durante el arranque la app parece rota.
         UILaunchScreen:

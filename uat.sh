@@ -10,8 +10,22 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-A=${UAT_DEVICE_A:-B8481770-B392-44DF-A33C-C0F0CED158C1}   # iPhone 18 Pro
-B=${UAT_DEVICE_B:-DFA0633B-1749-42D6-9739-6DCB3431CF56}   # iPhone 18 Pro Max
+# Los simuladores se buscan POR NOMBRE. Antes iban dos UDID escritos a mano y
+# dejaron de existir al reinstalar Xcode: el script fallaba sin decir por que.
+device_id() {
+  xcrun simctl list devices available \
+    | sed -n "s/^ *$1 (\([0-9A-F-]*\)) (.*/\1/p" | head -1
+}
+
+A=${UAT_DEVICE_A:-$(device_id "iPhone 18 Pro")}
+B=${UAT_DEVICE_B:-$(device_id "iPhone 18 Pro Max")}
+
+for pair in "A:${UAT_DEVICE_A:-iPhone 18 Pro}:$A" "B:${UAT_DEVICE_B:-iPhone 18 Pro Max}:$B"; do
+  if [ -z "${pair##*:}" ]; then
+    echo "No encuentro el simulador ${pair#*:}. Creálo en Xcode o exporta UAT_DEVICE_A / UAT_DEVICE_B."
+    exit 1
+  fi
+done
 BUNDLE=cl.toolazy.friends
 DD=${UAT_DERIVED_DATA:-/tmp/friends-dd}
 APP="$DD/Build/Products/Debug-iphonesimulator/Friends.app"

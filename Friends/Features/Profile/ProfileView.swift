@@ -8,6 +8,7 @@ struct ProfileView: View {
     @State private var store = StoreService.shared
     @State private var likesReceived: ReceivedLikesResponse?
     @State private var isDeleting = false
+    @State private var isRestoring = false
     @State private var error: AlertMessage?
 
     /// Una sola presentacion, no una por pantalla: SwiftUI solo respeta UN
@@ -73,6 +74,7 @@ struct ProfileView: View {
                 aboutSection
                 settingsSection
                 accountSection
+                legalSection
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Perfil")
@@ -281,10 +283,31 @@ struct ProfileView: View {
 
     private var accountSection: some View {
         Section("Cuenta") {
+            // Quien ya pago y reinstala la app no tiene por que topar primero
+            // con el paywall para recuperar su suscripcion.
+            Button(isRestoring ? "Restaurando…" : "Restaurar compras", systemImage: "arrow.clockwise") {
+                Task { await restorePurchases() }
+            }
+            .disabled(isRestoring)
             Button("Descargar mis datos", systemImage: "square.and.arrow.down") { Task { await export() } }
             Button("Cerrar sesión", systemImage: "rectangle.portrait.and.arrow.right") { confirm = .signOut }
             Button("Borrar mi cuenta", systemImage: "trash", role: .destructive) { confirm = .delete }
                 .disabled(isDeleting)
+        }
+    }
+
+    /// Apple pide que las dos paginas esten a la vista dentro de la app, no
+    /// solo en la ficha de la App Store ni solo detras del paywall.
+    private var legalSection: some View {
+        Section {
+            Link(destination: LegalLinks.terms) {
+                Label("Términos de uso", systemImage: "doc.text")
+            }
+            Link(destination: LegalLinks.privacy) {
+                Label("Privacidad", systemImage: "hand.raised.square")
+            }
+        } footer: {
+            Text("Friends \(Bundle.appVersion)")
         }
     }
 
@@ -304,6 +327,18 @@ struct ProfileView: View {
             sheet = .export(url)
         } catch {
             self.error = AlertMessage("No se pudieron descargar tus datos")
+        }
+    }
+
+    private func restorePurchases() async {
+        isRestoring = true
+        defer { isRestoring = false }
+        await store.restore()
+        if let message = store.errorMessage {
+            error = AlertMessage("No se pudieron restaurar las compras", message: message)
+        } else if !store.isPremium {
+            error = AlertMessage("No encontramos ninguna suscripción",
+                                 message: "Con esta cuenta de Apple no hay ninguna compra que recuperar.")
         }
     }
 
@@ -332,4 +367,14 @@ struct ShareSheet: UIViewControllerRepresentable {
 
 extension URL: @retroactive Identifiable {
     public var id: String { absoluteString }
+}
+
+extension Bundle {
+    /// "1.0 (12)": la version de marketing y el build, que es lo que hay que
+    /// pedirle a alguien que reporta un fallo.
+    static var appVersion: String {
+        let short = main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let build = main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        return "\(short) (\(build))"
+    }
 }

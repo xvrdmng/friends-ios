@@ -171,8 +171,8 @@ struct PaywallView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             HStack(spacing: 18) {
-                Link("Términos de uso", destination: URL(string: "https://toolazy.cl/friends/terminos")!)
-                Link("Privacidad", destination: URL(string: "https://toolazy.cl/friends/privacidad")!)
+                Link("Términos de uso", destination: LegalLinks.terms)
+                Link("Privacidad", destination: LegalLinks.privacy)
             }
             .font(.caption2)
         }
