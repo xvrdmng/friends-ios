@@ -25,9 +25,37 @@ fi
 
 [ -d "$APP" ] || { echo "No encuentro $APP. Corre ./uat.sh sin --no-build."; exit 1; }
 
+API=${FRIENDS_API:-$HOME/Code/friends-api}
+
 if ! curl -sf -o /dev/null --max-time 2 http://localhost:3000/up; then
   echo "⚠︎  El backend no responde en localhost:3000."
-  echo "   En otra pestaña: cd ~/Code/friends-api && bin/rails server"
+  echo "   En otra pestaña: cd $API && bin/rails server"
+else
+  # Un servidor que lleva corriendo desde antes de una migracion no ve las
+  # columnas nuevas y responde 500 a cosas que en el codigo estan bien. Ya nos
+  # ha costado dos rondas de UAT: mejor avisar aqui.
+  if [ -d "$API" ] && ! (cd "$API" && bin/rails db:abort_if_pending_migrations >/dev/null 2>&1); then
+    echo "⚠︎  Hay migraciones sin aplicar en $API."
+    echo "   cd $API && bin/rails db:migrate  y REINICIA el servidor."
+  else
+    # /up solo dice que Puma esta vivo. Para saber si el PROCESO esta al dia hay
+    # que pedirle algo que toque los modelos: un servidor arrancado antes de una
+    # migracion responde 500 aunque la base ya este migrada.
+    TOKEN=$(curl -sf --max-time 3 -X POST http://localhost:3000/api/v1/auth/dev_session \
+      -H 'Content-Type: application/json' -d '{"handle":"u_dev"}' \
+      | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+    if [ -z "$TOKEN" ]; then
+      echo "⚠︎  El backend responde en /up pero no emite sesiones. Reinicialo."
+    else
+      CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+        http://localhost:3000/api/v1/matches -H "Authorization: Bearer $TOKEN")
+      if [ "$CODE" != "200" ]; then
+        echo "⚠︎  /api/v1/matches devuelve $CODE: el servidor esta desfasado."
+        echo "   Es un proceso arrancado antes de la ultima migracion. REINICIALO:"
+        echo "   Ctrl-C y  bin/rails server   (en $API)"
+      fi
+    fi
+  fi
 fi
 
 for D in "$A" "$B"; do
