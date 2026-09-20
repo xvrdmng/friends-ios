@@ -14,9 +14,12 @@ final class FakeAPI: APIService, @unchecked Sendable {
     var calls: [Call] { lock.withLock { _calls } }
     func calls(matching path: String) -> [Call] { calls.filter { $0.path.hasSuffix(path) } }
 
-    private let decoder: JSONDecoder = {
+    /// Uno nuevo por llamada, no uno compartido: hay view models que piden dos
+    /// cosas a la vez con `async let`, y `JSONDecoder` no aguanta que lo usen
+    /// dos hilos al mismo tiempo (revienta el proceso de pruebas entero).
+    private var decoder: JSONDecoder {
         let d = JSONDecoder(); d.keyDecodingStrategy = .convertFromSnakeCase; d.dateDecodingStrategy = .iso8601; return d
-    }()
+    }
 
     private func record(_ endpoint: APIEndpoint, _ body: (any Encodable & Sendable)?) -> Call {
         var dict: [String: Any] = [:]

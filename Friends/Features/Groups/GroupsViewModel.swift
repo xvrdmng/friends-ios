@@ -19,6 +19,25 @@ final class GroupsViewModel {
 
     init(api: any APIService = APIClient.shared) { self.api = api }
 
+    /// Tus grupos, filtrados por lo que estes buscando.
+    ///
+    /// Buscar tiene que encontrar TAMBIEN los tuyos. El servidor los excluye
+    /// del descubrimiento a proposito —ya estas dentro, no hay nada que
+    /// descubrir—, asi que si el filtro no se aplicara aqui, buscar un grupo
+    /// tuyo por su nombre no daria ningun resultado.
+    var visibleMine: [FriendGroup] {
+        let needle = query.trimmingCharacters(in: .whitespaces)
+        guard !needle.isEmpty else { return mine }
+        return mine.filter {
+            $0.name.localizedCaseInsensitiveContains(needle)
+                || ($0.description ?? "").localizedCaseInsensitiveContains(needle)
+        }
+    }
+
+    /// Ni uno ni otro: hace falta para distinguir "no hay nada" de "no hay
+    /// nada NUEVO", que no es lo mismo cuando el tuyo si aparece arriba.
+    var hasNoResults: Bool { visibleMine.isEmpty && discover.isEmpty }
+
     func load() async {
         async let mineResponse: GroupsResponse? = try? api.send(.groups(scope: .mine, category: nil, query: nil))
         async let discoverResponse: GroupsResponse? = try? api.send(.groups(scope: .discover, category: category, query: query))

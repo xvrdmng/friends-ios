@@ -56,9 +56,9 @@ struct GroupsView: View {
                 Section { categoryRow }
                     .listRowInsets(.init(top: 4, leading: 16, bottom: 4, trailing: 0))
 
-                if !model.mine.isEmpty {
+                if !model.visibleMine.isEmpty {
                     Section("Tus grupos") {
-                        ForEach(model.mine) { group in row(group) }
+                        ForEach(model.visibleMine) { group in row(group) }
                     }
                 }
 
@@ -84,9 +84,21 @@ struct GroupsView: View {
                     .buttonStyle(.glassProminent)
             }
             .listRowBackground(Color.clear)
+        } else if model.hasNoResults {
+            ContentUnavailableView {
+                Label("Sin resultados", systemImage: "magnifyingglass")
+            } description: {
+                Text("No hay ningún grupo que se llame «\(model.query)».")
+            } actions: {
+                Button("Crear «\(model.query)»") { showCreate = true }
+                    .buttonStyle(.glassProminent)
+            }
+            .listRowBackground(Color.clear)
         } else {
-            ContentUnavailableView.search(text: model.query)
-                .listRowBackground(Color.clear)
+            // Tu grupo si esta, arriba: decir "sin resultados" aqui seria mentir.
+            Text("Nada nuevo con ese nombre. Los tuyos salen arriba.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
     }
 
