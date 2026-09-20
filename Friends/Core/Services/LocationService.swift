@@ -17,6 +17,8 @@ final class LocationService: NSObject {
 
     private let manager = CLLocationManager()
     private var continuation: CheckedContinuation<CLLocation?, Never>?
+    /// Quien esta esperando a que la persona conteste a la hoja del permiso.
+    private var accessWaiters: [CheckedContinuation<Void, Never>] = []
 
     override private init() {
         super.init()
@@ -32,16 +34,27 @@ final class LocationService: NSObject {
         case .authorizedWhenInUse, .authorizedAlways: access = .granted
         @unknown default:                         access = .denied
         }
+        // El sistema avisa en cuanto se contesta: quien esperaba, sigue.
+        if access != .notDetermined, !accessWaiters.isEmpty {
+            let waiting = accessWaiters
+            accessWaiters = []
+            waiting.forEach { $0.resume() }
+        }
     }
 
     /// Pide permiso (si aun no se decidio) y devuelve si quedo concedido.
+    ///
+    /// Se espera al aviso del sistema, no dando vueltas. Antes esto preguntaba
+    /// por el estado cada 250 ms durante 30 segundos y luego se rendia: quien
+    /// tardaba un poco en leer la hoja del permiso se encontraba con que la
+    /// pantalla ya habia decidido que no.
     func requestAccess() async -> Bool {
-        if access == .notDetermined {
-            manager.requestWhenInUseAuthorization()
-            for _ in 0..<120 where access == .notDetermined {   // hasta ~30 s a que responda
-                try? await Task.sleep(for: .milliseconds(250))
-                refreshAccess()
-            }
+        guard access == .notDetermined else { return access == .granted }
+        manager.requestWhenInUseAuthorization()
+        await withCheckedContinuation { continuation in
+            // Puede haber contestado entre el guard y esto.
+            if access != .notDetermined { continuation.resume() }
+            else { accessWaiters.append(continuation) }
         }
         return access == .granted
     }
