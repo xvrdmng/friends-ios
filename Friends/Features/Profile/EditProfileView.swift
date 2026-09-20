@@ -22,6 +22,7 @@ struct EditProfileView: View {
     @State private var selectedInterests: Set<String> = []
     @State private var interests: [InterestItem] = []
     @State private var isLoading = true
+    @State private var loadFailed = false
     @State private var isSaving = false
     @State private var error: AlertMessage?
 
@@ -30,15 +31,34 @@ struct EditProfileView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if isLoading { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity) } else { form }
+                if isLoading {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if loadFailed {
+                    // Sin esto el formulario salia VACIO y guardar borraba de
+                    // verdad la bio, los intereses y el resto: lo que no se
+                    // pudo leer se mandaba de vuelta como si estuviera en blanco.
+                    ContentUnavailableView {
+                        Label("No pudimos cargar tu perfil", systemImage: "wifi.exclamationmark")
+                    } description: {
+                        Text("Revisa tu conexión. No editamos nada hasta poder leer lo que ya tienes.")
+                    } actions: {
+                        Button("Reintentar") { Task { await load() } }
+                            .buttonStyle(.glassProminent)
+                    }
+                } else {
+                    form
+                }
             }
             .navigationTitle("Editar perfil")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") { Task { await save() } }
-                        .disabled(isSaving || displayName.trimmingCharacters(in: .whitespaces).isEmpty)
+                if !loadFailed {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Guardar") { Task { await save() } }
+                            .disabled(isSaving || isLoading
+                                      || displayName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
                 }
             }
             .errorAlert($error)
@@ -157,9 +177,14 @@ struct EditProfileView: View {
     // MARK: - Datos
 
     private func load() async {
+        isLoading = true
+        loadFailed = false
         defer { isLoading = false }
         if let response: InterestsResponse = try? await api.send(.interests) { interests = response.interests }
-        guard let me: MeResponse = try? await api.send(.me) else { return }
+        guard let me: MeResponse = try? await api.send(.me) else {
+            loadFailed = true
+            return
+        }
 
         displayName = me.profile?.displayName ?? ""
         bio = me.profile?.bio ?? ""

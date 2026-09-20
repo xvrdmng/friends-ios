@@ -92,9 +92,16 @@ final class ChatViewModel {
 
     // MARK: - Envio
 
+    static let maxLength = 2000
+
     func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, text.count <= 2000 else { return }
+        guard !text.isEmpty else { return }
+        guard text.count <= Self.maxLength else {
+            // Antes el boton simplemente no hacia nada y no se decia por que.
+            errorMessage = "Ese mensaje es muy largo: como mucho \(Self.maxLength) caracteres."
+            return
+        }
         draft = ""
         deliver(text: text, clientID: UUID().uuidString)
     }

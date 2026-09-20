@@ -62,6 +62,7 @@ final class OnboardingViewModel {
     private(set) var isUploading = false
     static let maxPhotos = 6
     static let minPhotos = 2
+    static let maxBio = 500
     private(set) var isSaving = false
     var errorMessage: String?
 
@@ -79,12 +80,7 @@ final class OnboardingViewModel {
         guard let profile = me.profile else { return }
 
         displayName = profile.displayName ?? ""
-        if let text = profile.birthdate {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            if let date = formatter.date(from: text) { birthdate = date }
-        }
+        if let text = profile.birthdate, let date = Self.isoDay.date(from: text) { birthdate = date }
         gender = profile.gender
         datingPreference = profile.datingPreference
         modeDating = profile.modeDating ?? true
@@ -124,7 +120,11 @@ final class OnboardingViewModel {
 
     /// Cada paso decide si se puede avanzar. Es la validacion del cliente; el
     /// servidor vuelve a validar (la edad, sobre todo).
-    var canAdvance: Bool {
+    var canAdvance: Bool { canAdvance(at: step) }
+
+    /// Por paso y no solo por el actual: asi la regla de cada uno se puede
+    /// comprobar sin tener que recorrer el wizard entero.
+    func canAdvance(at step: Step) -> Bool {
         switch step {
         case .name:             displayName.trimmingCharacters(in: .whitespaces).count >= 2
         case .birthdate:        age >= 18
@@ -135,12 +135,14 @@ final class OnboardingViewModel {
         case .interests:        selectedInterests.count >= 3
         case .photos:           photos.count >= Self.minPhotos && !isUploading
         case .aboutYou:         true
-        case .bio:              true
+        case .bio:              bio.count <= Self.maxBio
         }
     }
 
-    /// Que falta para poder avanzar; se muestra al tocar Siguiente.
-    var missingHint: String {
+    /// Que falta para poder avanzar. Se ensena bajo el boton apagado.
+    var missingHint: String { missingHint(at: step) }
+
+    func missingHint(at step: Step) -> String {
         switch step {
         case .name:             "Escribe tu nombre (minimo 2 letras)."
         case .birthdate:        "Tienes que ser mayor de 18."
@@ -150,6 +152,7 @@ final class OnboardingViewModel {
         case .languages:        "Elige al menos un idioma nativo."
         case .interests:        "Elige al menos 3 intereses (llevas \(selectedInterests.count))."
         case .photos:           "Sube al menos \(Self.minPhotos) fotos (llevas \(photos.count))."
+        case .bio:              "La bio no puede pasar de \(Self.maxBio) caracteres."
         default:                ""
         }
     }
@@ -157,6 +160,20 @@ final class OnboardingViewModel {
     var age: Int {
         Calendar.current.dateComponents([.year], from: birthdate, to: .now).year ?? 0
     }
+
+    /// La fecha viaja como "yyyy-MM-dd" gregoriano, que es lo que espera el
+    /// servidor. Un `DateFormatter` recien hecho usa el calendario y la
+    /// numeracion de QUIEN usa el telefono: con el calendario budista o el
+    /// japones, el mismo cumpleanos se enviaba con otro ano y el servidor
+    /// rechazaba el alta por menor de edad.
+    static let isoDay: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 
     func loadCatalogs() async {
         if interests.isEmpty {
@@ -297,9 +314,7 @@ final class OnboardingViewModel {
         case .name:
             payload.displayName = displayName.trimmingCharacters(in: .whitespaces)
         case .birthdate:
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            payload.birthdate = formatter.string(from: birthdate)
+            payload.birthdate = Self.isoDay.string(from: birthdate)
         case .gender:
             payload.gender = gender
         case .datingPreference:

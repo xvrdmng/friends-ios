@@ -7,6 +7,7 @@ struct FiltersView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var filters: FiltersResponse?
+    @State private var loadFailed = false
     @State private var isSaving = false
     @State private var paywallReason: PaywallReason?
     @State private var error: AlertMessage?
@@ -22,7 +23,22 @@ struct FiltersView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if let filters { form(filters) } else { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity) }
+                if let filters {
+                    form(filters)
+                } else if loadFailed {
+                    // Antes se quedaba girando para siempre: sin filtros y sin
+                    // manera de volver a pedirlos.
+                    ContentUnavailableView {
+                        Label("No pudimos cargar tus filtros", systemImage: "wifi.exclamationmark")
+                    } description: {
+                        Text("Revisa tu conexión.")
+                    } actions: {
+                        Button("Reintentar") { Task { await load() } }
+                            .buttonStyle(.glassProminent)
+                    }
+                } else {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
             .navigationTitle("Filtros")
             .navigationBarTitleDisplayMode(.inline)
@@ -124,7 +140,9 @@ struct FiltersView: View {
     }
 
     private func load() async {
+        loadFailed = false
         filters = try? await api.send(.filters)
+        loadFailed = filters == nil
     }
 
     private func save() async {

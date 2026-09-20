@@ -76,28 +76,42 @@ struct OnboardingWizardView: View {
 
     private func footer(_ model: OnboardingViewModel) -> some View {
         let isLast = model.step == model.visibleSteps.last
-        return HStack(spacing: 12) {
-            if model.step != .name {
-                Button("Atrás") { model.back() }
-                    .buttonStyle(.glass)
-                    .disabled(model.isSaving)
+        return VStack(spacing: 10) {
+            // Con el boton apagado y nada escrito, lo unico que veia la gente
+            // era un "Siguiente" gris que no responde. El motivo ya estaba
+            // calculado; solo faltaba ensenarlo.
+            if !model.canAdvance && !model.missingHint.isEmpty {
+                Label(model.missingHint, systemImage: "info.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityHint("Falta esto para poder seguir")
             }
 
-            Button {
-                Task { await model.next() }
-            } label: {
-                if model.isSaving {
-                    ProgressView().frame(maxWidth: .infinity)
-                } else {
-                    Text(isLast ? "Terminar" : "Siguiente").frame(maxWidth: .infinity)
+            HStack(spacing: 12) {
+                if model.step != .name {
+                    Button("Atrás") { model.back() }
+                        .buttonStyle(.glass)
+                        .disabled(model.isSaving)
                 }
+
+                Button {
+                    Task { await model.next() }
+                } label: {
+                    if model.isSaving {
+                        ProgressView().frame(maxWidth: .infinity)
+                    } else {
+                        Text(isLast ? "Terminar" : "Siguiente").frame(maxWidth: .infinity)
+                    }
+                }
+                .buttonStyle(.glassProminent)
+                .disabled(model.isSaving || !model.canAdvance)
             }
-            .buttonStyle(.glassProminent)
-            .disabled(model.isSaving || !model.canAdvance)
+            .controlSize(.large)
         }
-        .controlSize(.large)
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .background(.bar)
+        .animation(.snappy, value: model.canAdvance)
     }
 }

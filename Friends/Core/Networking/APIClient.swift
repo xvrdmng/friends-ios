@@ -133,12 +133,22 @@ final class APIClient: Sendable {
         return request
     }
 
+    /// Todo esto es "no hay red", y la app lo cuenta igual. Antes solo contaba
+    /// `notConnectedToInternet`, asi que entrar al metro —conexion que se cae a
+    /// medias, DNS que no resuelve, peticion que expira— acababa en un
+    /// "No se pudo completar" sin decir que el problema era la cobertura.
+    private static let offlineCodes: Set<URLError.Code> = [
+        .notConnectedToInternet, .networkConnectionLost, .timedOut,
+        .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
+        .internationalRoamingOff, .dataNotAllowed, .secureConnectionFailed
+    ]
+
     private func execute(_ request: URLRequest) async throws -> Data {
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
-        } catch let error as URLError where error.code == .notConnectedToInternet {
+        } catch let error as URLError where Self.offlineCodes.contains(error.code) {
             throw APIError.offline
         }
 

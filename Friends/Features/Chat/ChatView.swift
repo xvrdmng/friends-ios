@@ -77,6 +77,16 @@ struct ChatView: View {
         }
         .task { await model.start() }
         .onDisappear { model.stop() }
+        // El view model ya apuntaba los fallos —cargar, deshacer el match, un
+        // mensaje demasiado largo— pero nadie los ensenaba.
+        .alert("No se pudo",
+               isPresented: Binding(get: { model.errorMessage != nil },
+                                    set: { if !$0 { model.errorMessage = nil } }),
+               presenting: model.errorMessage) { _ in
+            Button("Aceptar", role: .cancel) {}
+        } message: { message in
+            Text(message)
+        }
         .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await model.refresh() } } }
         .sheet(item: $report) { target in
             ReportSheet(target: target) { didBlock in if didBlock { onClose(true) } }
@@ -254,6 +264,19 @@ struct ChatView: View {
         }
     }
 
+    /// Solo aparece cerca del limite: antes no habia ninguna senal hasta que
+    /// el boton dejaba de responder.
+    @ViewBuilder
+    private var lengthCounter: some View {
+        let count = model.draft.count
+        if count > ChatViewModel.maxLength - 200 {
+            Text("\(count)/\(ChatViewModel.maxLength)")
+                .font(.caption2)
+                .foregroundStyle(count > ChatViewModel.maxLength ? .red : .secondary)
+                .padding(.trailing, 60)
+        }
+    }
+
     private var closedState: some View {
         ContentUnavailableView {
             Label("Esta conversación ya no está disponible", systemImage: "door.left.hand.closed")
@@ -288,5 +311,6 @@ struct ChatView: View {
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background(.bar)
+        .overlay(alignment: .topTrailing) { lengthCounter }
     }
 }
