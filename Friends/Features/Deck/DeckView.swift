@@ -125,13 +125,9 @@ struct DeckView: View {
             }
         }
 
-        ToolbarItem(placement: .topBarTrailing) {
-            if store.isPremium {
-                Label("Premium", systemImage: "star.fill")
-                    .labelStyle(.iconOnly)
-                    .foregroundStyle(.yellow)
-                    .accessibilityLabel("Cuenta premium")
-            } else if let left = model.likesLeft {
+        // Solo los free ven cuantos likes les quedan; premium no lleva insignia.
+        if !store.isPremium, let left = model.likesLeft {
+            ToolbarItem(placement: .topBarTrailing) {
                 Button { sheet = .paywall(.likeLimit) } label: {
                     Label("\(left)", systemImage: "heart")
                         .labelStyle(.titleAndIcon)
