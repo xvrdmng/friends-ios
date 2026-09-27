@@ -6,6 +6,7 @@ struct GroupsView: View {
     @State private var open: FriendGroup?
     @State private var showCreate = false
     @State private var showMap = false
+    @State private var ownedExpanded = true
 
     var body: some View {
         NavigationStack {
@@ -68,9 +69,31 @@ struct GroupsView: View {
                 Section { categoryRow }
                     .listRowInsets(.init(top: 4, leading: 16, bottom: 4, trailing: 0))
 
-                if !model.visibleMine.isEmpty {
+                if !model.visibleOwned.isEmpty {
+                    Section {
+                        if ownedExpanded {
+                            ForEach(model.visibleOwned) { group in row(group) }
+                        }
+                    } header: {
+                        Button {
+                            withAnimation { ownedExpanded.toggle() }
+                        } label: {
+                            HStack {
+                                Text("Creados por ti (\(model.visibleOwned.count))")
+                                Spacer()
+                                Image(systemName: "chevron.down")
+                                    .rotationEffect(.degrees(ownedExpanded ? 0 : -90))
+                            }
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Creados por ti, \(ownedExpanded ? "desplegado" : "plegado")")
+                    }
+                }
+
+                if !model.visibleJoined.isEmpty {
                     Section("Tus grupos") {
-                        ForEach(model.visibleMine) { group in row(group) }
+                        ForEach(model.visibleJoined) { group in row(group) }
                     }
                 }
 

@@ -34,6 +34,10 @@ final class GroupsViewModel {
         }
     }
 
+    /// Los que creaste, y aparte el resto de los tuyos: la lista los muestra por separado.
+    var visibleOwned: [FriendGroup] { visibleMine.filter(\.isOwner) }
+    var visibleJoined: [FriendGroup] { visibleMine.filter { !$0.isOwner } }
+
     /// Ni uno ni otro: hace falta para distinguir "no hay nada" de "no hay
     /// nada NUEVO", que no es lo mismo cuando el tuyo si aparece arriba.
     var hasNoResults: Bool { visibleMine.isEmpty && discover.isEmpty }
