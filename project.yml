@@ -24,9 +24,12 @@ targets:
     settings:
       configs:
         Debug:
-          # Sin cuenta de Apple Developer no hay passkeys, asi que en Debug se
-          # trabaja contra el Rails local con el atajo /auth/dev_session.
+          # En el simulador se trabaja contra el Rails local con el atajo
+          # /auth/dev_session. En un iPhone de verdad "localhost" es el propio
+          # telefono y las passkeys exigen HTTPS con dominio asociado: ahi va
+          # contra el servidor real, igual que Release.
           API_BASE_URL: http://localhost:3000
+          "API_BASE_URL[sdk=iphoneos*]": https://friends-api.toolazy.cl
         Release:
           API_BASE_URL: https://friends-api.toolazy.cl
           CODE_SIGN_ENTITLEMENTS: Friends/Friends.Release.entitlements

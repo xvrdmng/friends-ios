@@ -6,8 +6,8 @@
 	     sirve el AASA en https://friends-api.toolazy.cl/.well-known/... -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>
-		<string>webcredentials:friends-api.toolazy.cl</string>
-		<string>applinks:friends-api.toolazy.cl</string>
+		<string>webcredentials:friends-api.toolazy.cl?mode=developer</string>
+		<string>applinks:friends-api.toolazy.cl?mode=developer</string>
 	</array>
 	<!-- Sandbox de APNs. La build que se sube usa Friends.Release.entitlements,
 	     con "production": un token de un entorno no vale en el otro. -->
