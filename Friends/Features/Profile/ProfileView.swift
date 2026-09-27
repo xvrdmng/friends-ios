@@ -263,7 +263,7 @@ struct ProfileView: View {
         }
     }
 
-    private enum Mode { case dating, friendship }
+    private enum Mode { case dating, friendship, language }
 
     /// Citas y Amistad: un interruptor para aparecer y ver gente en ese modo, y
     /// a quien se le ensena. Cada modo guarda su propia preferencia.
@@ -302,6 +302,10 @@ struct ProfileView: View {
         let native = entries.filter { $0.kind == "native" }
         let learning = entries.filter { $0.kind == "learning" }
         return Section("Idiomas") {
+            Toggle("Mostrarme en Idiomas", isOn: Binding(
+                get: { profile?.modeLanguage ?? false },
+                set: { on in Task { await saveMode(.language, enabled: on) } }
+            ))
             Button { sheet = .languages } label: {
                 VStack(alignment: .leading, spacing: 14) {
                     languageRow("Idiomas nativos", native.map { languageNames[$0.languageId] ?? "…" })
@@ -328,7 +332,11 @@ struct ProfileView: View {
 
     private func saveMode(_ mode: Mode, enabled: Bool) async {
         var payload = OnboardingPayload()
-        if mode == .dating { payload.modeDating = enabled } else { payload.modeFriendship = enabled }
+        switch mode {
+        case .dating:     payload.modeDating = enabled
+        case .friendship: payload.modeFriendship = enabled
+        case .language:   payload.modeLanguage = enabled
+        }
         await save(payload)
     }
 
