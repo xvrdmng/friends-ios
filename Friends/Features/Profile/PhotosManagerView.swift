@@ -128,7 +128,7 @@ struct PhotosManagerView: View {
                   let jpeg = Self.jpeg(from: data) else { continue }
             do {
                 let response: PhotoResponse = try await api.upload(
-                    .photos, field: "image", data: jpeg, filename: "photo.jpg",
+                    .uploadPhoto, field: "image", data: jpeg, filename: "photo.jpg",
                     mimeType: "image/jpeg", fields: [:]
                 )
                 photos.append(response.photo)

@@ -21,6 +21,8 @@ enum APIEndpoint: Sendable {
     case me, updateMe, deleteMe, exportMe
     case onboarding, location
     case photos, photo(id: String), orderPhotos
+    /// Subir una foto: mismo path que `photos` (que es el listado, GET) pero POST.
+    case uploadPhoto
     case filters, updateFilters
     case interests, languages
 
@@ -79,7 +81,7 @@ enum APIEndpoint: Sendable {
         case .exportMe:             "/api/v1/me/export"
         case .onboarding:           "/api/v1/me/onboarding"
         case .location:             "/api/v1/me/location"
-        case .photos:               "/api/v1/me/photos"
+        case .photos, .uploadPhoto: "/api/v1/me/photos"
         case .photo(let id):  "/api/v1/me/photos/\(id)"
         case .orderPhotos:          "/api/v1/me/photos/order"
         case .filters, .updateFilters: "/api/v1/me/filters"

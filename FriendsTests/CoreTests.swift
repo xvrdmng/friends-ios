@@ -154,6 +154,11 @@ final class EndpointTests: XCTestCase {
     func testRutasYMetodos() {
         XCTAssertEqual(APIEndpoint.like.path, "/api/v1/likes"); XCTAssertEqual(APIEndpoint.like.method, .post)
         XCTAssertEqual(APIEndpoint.photo(id: "p").method, .delete)
+        // Listar fotos es GET; subir una es POST al mismo path. Un GET no puede llevar
+        // cuerpo: iOS lo rechaza en el telefono y la peticion no llega al servidor.
+        XCTAssertEqual(APIEndpoint.photos.method, .get)
+        XCTAssertEqual(APIEndpoint.uploadPhoto.method, .post)
+        XCTAssertEqual(APIEndpoint.uploadPhoto.path, APIEndpoint.photos.path)
         XCTAssertEqual(APIEndpoint.location.method, .put)
         XCTAssertEqual(APIEndpoint.unblock(userID: "u").path, "/api/v1/blocks/u")
         XCTAssertEqual(APIEndpoint.kick(slug: "g", userID: "u").path, "/api/v1/groups/g/members/u")

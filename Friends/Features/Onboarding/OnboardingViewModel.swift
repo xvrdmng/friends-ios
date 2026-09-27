@@ -227,7 +227,7 @@ final class OnboardingViewModel {
 
         do {
             let response: PhotoResponse = try await api.upload(
-                .photos, field: "image", data: jpeg, filename: "photo.jpg", mimeType: "image/jpeg"
+                .uploadPhoto, field: "image", data: jpeg, filename: "photo.jpg", mimeType: "image/jpeg"
             )
             photos.append(response.photo)
         } catch let error as APIError {
