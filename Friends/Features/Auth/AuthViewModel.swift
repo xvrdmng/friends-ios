@@ -26,12 +26,14 @@ final class AuthViewModel {
     /// instante que no hay ninguna, se pasa al alta. Una hoja de Face ID que la
     /// persona cancela tarda mucho mas que eso, y entonces no se hace nada.
     func continueWithPasskey() async {
-        let start = ContinuousClock.now
         let outcome = await perform { try await self.signInCeremony() }
-        if outcome == .canceled, ContinuousClock.now - start < .milliseconds(800) {
+        if outcome == .noPasskey {
             await perform { try await self.registerCeremony() }
         }
     }
+
+    /// iOS rechazo al instante, sin abrir ninguna hoja: no hay passkey para entrar.
+    private struct NoPasskeyAvailable: Error {}
 
     private func registerCeremony() async throws -> AuthResponse {
         let options: ChallengeResponse = try await api.send(.registrationOptions)
@@ -64,7 +66,17 @@ final class AuthViewModel {
         let options: ChallengeResponse = try await api.send(.sessionOptions)
         let challenge = try PasskeyService.challengeData(from: options.publicKey.challenge)
 
-        let authorization = try await passkeys.signIn(challenge: challenge)
+        // Solo se cronometra la llamada a iOS, no la red: con conexion lenta el
+        // reto puede tardar mas de lo que tarda iOS en decir que no hay passkey.
+        let asked = ContinuousClock.now
+        let authorization: ASAuthorization
+        do {
+            authorization = try await passkeys.signIn(challenge: challenge)
+        } catch let error as ASAuthorizationError
+                    where [.canceled, .notInteractive, .unknown].contains(error.code)
+                    && ContinuousClock.now - asked < .milliseconds(1500) {
+            throw NoPasskeyAvailable()
+        }
 
         guard let credential = authorization.credential
                 as? ASAuthorizationPlatformPublicKeyCredentialAssertion else {
@@ -116,7 +128,7 @@ final class AuthViewModel {
 
     // MARK: -
 
-    enum Outcome { case signedIn, canceled, failed, busy }
+    enum Outcome { case signedIn, canceled, noPasskey, failed, busy }
 
     @discardableResult
     private func perform(_ ceremony: @escaping () async throws -> AuthResponse) async -> Outcome {
@@ -130,6 +142,8 @@ final class AuthViewModel {
             await SessionStore.shared.store(response.token)
             session.didSignIn(needsOnboarding: !response.user.onboardingCompleted)
             return .signedIn
+        } catch is NoPasskeyAvailable {
+            return .noPasskey
         } catch let error as ASAuthorizationError where error.code == .canceled {
             // El usuario cerro la hoja de Face ID (o no habia ninguna passkey):
             // no es un error que mostrar.
