@@ -265,32 +265,38 @@ struct ProfileView: View {
     /// A quien se le ensena en el mazo de citas. Lo mismo que se elige al
     /// registrarse, pero editable: antes solo se podia cambiar rehaciendo el alta.
     private var datingSection: some View {
-        Section {
-            Picker("Mostrarme en Citas", selection: Binding(
-                get: { profile?.datingPreference ?? "everyone" },
-                set: { value in Task { await saveDatingPreference(value) } }
-            )) {
-                Text("Mujeres").tag("women")
-                Text("Hombres").tag("men")
-                Text("Todos").tag("everyone")
+        Section("Citas") {
+            Text("Mostrarme en Citas")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            ChipFlow {
+                ForEach([("Mujeres", "women"), ("Hombres", "men"), ("Todos", "everyone")], id: \.1) { label, value in
+                    ChoiceChip(label: label, isSelected: (profile?.datingPreference ?? "everyone") == value) {
+                        Task { await saveDatingPreference(value) }
+                    }
+                }
             }
-        } header: {
-            Text("Citas")
-        } footer: {
-            Text("Solo afecta al mazo de citas.")
         }
     }
 
+    /// Toda la tarjeta abre el editor: igual que "Sobre ti", sin botones extra.
     private var languagesSection: some View {
         let entries = account.me?.languages ?? []
         let native = entries.filter { $0.kind == "native" }
         let learning = entries.filter { $0.kind == "learning" }
         return Section("Idiomas") {
-            languageRow("Idiomas nativos", native.map { languageNames[$0.languageId] ?? "…" })
-            languageRow("Quiero aprender", learning.map {
-                "\(languageNames[$0.languageId] ?? "…")\($0.level.map { " " + $0.uppercased() } ?? "")"
-            })
-            Button("Editar idiomas", systemImage: "character.bubble") { sheet = .languages }
+            Button { sheet = .languages } label: {
+                VStack(alignment: .leading, spacing: 14) {
+                    languageRow("Idiomas nativos", native.map { languageNames[$0.languageId] ?? "…" })
+                    languageRow("Quiero aprender", learning.map {
+                        "\(languageNames[$0.languageId] ?? "…")\($0.level.map { " " + $0.uppercased() } ?? "")"
+                    })
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Toca para editar tus idiomas")
         }
     }
 
