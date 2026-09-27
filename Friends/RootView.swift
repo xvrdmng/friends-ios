@@ -18,12 +18,12 @@ struct RootView: View {
     /// Los rotulos son tambien el contrato de `TabsUITests`, que busca los
     /// botones de la barra por estos nombres.
     private enum AppTab: Hashable {
-        case date, friends, groups, chats, profile
+        case date, likes, groups, chats, profile
 
         var title: String {
             switch self {
             case .date: "Date"
-            case .friends: "Friends"
+            case .likes: "Likes"
             case .groups: "Groups"
             case .chats: "Chats"
             case .profile: "Profile"
@@ -33,7 +33,7 @@ struct RootView: View {
         var symbol: String {
             switch self {
             case .date: "heart.fill"
-            case .friends: "person.2.fill"
+            case .likes: "heart.circle.fill"
             case .groups: "person.3.fill"
             case .chats: "bubble.left.and.bubble.right.fill"
             case .profile: "person.crop.circle.fill"
@@ -46,8 +46,8 @@ struct RootView: View {
             Tab(AppTab.date.title, systemImage: AppTab.date.symbol, value: AppTab.date) {
                 DeckView(context: .dating)
             }
-            Tab(AppTab.friends.title, systemImage: AppTab.friends.symbol, value: AppTab.friends) {
-                DeckView(context: .friendship)
+            Tab(AppTab.likes.title, systemImage: AppTab.likes.symbol, value: AppTab.likes) {
+                LikesView()
             }
             Tab(AppTab.groups.title, systemImage: AppTab.groups.symbol, value: AppTab.groups) {
                 GroupsView()

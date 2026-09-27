@@ -26,7 +26,7 @@ enum APIEndpoint: Sendable {
 
     // Descubrimiento
     case deck(context: DeckContext, groupSlug: String?)
-    case like, likesReceived, rewind
+    case like, likesReceived(context: DeckContext?), rewind
 
     // Matches y chat
     case matches, unmatch(id: String)
@@ -42,6 +42,9 @@ enum APIEndpoint: Sendable {
     case join(slug: String), leave(slug: String)
     case members(slug: String)
     case kick(slug: String, userID: String)
+    case groupRequests(slug: String)
+    case approveRequest(slug: String, id: String), rejectRequest(slug: String, id: String)
+    case cancelRequest(slug: String)
 
     // Seguridad
     case blocks, block, unblock(userID: String)
@@ -54,12 +57,12 @@ enum APIEndpoint: Sendable {
     var method: HTTPMethod {
         switch self {
         case .me, .exportMe, .photos, .filters, .interests, .languages, .deck, .likesReceived,
-             .matches, .messages, .groups, .group, .members, .blocks:
+             .matches, .messages, .groups, .group, .members, .blocks, .groupRequests:
             .get
         case .updateMe: .patch
         case .onboarding, .orderPhotos, .updateFilters, .groupCover: .patch
         case .location: .put
-        case .deleteMe, .signOut, .photo, .unmatch, .leave, .kick, .unblock, .unregisterDevice: .delete
+        case .deleteMe, .signOut, .photo, .unmatch, .leave, .kick, .unblock, .unregisterDevice, .cancelRequest: .delete
         default: .post
         }
     }
@@ -94,6 +97,10 @@ enum APIEndpoint: Sendable {
         case .group(let slug):      "/api/v1/groups/\(slug)"
         case .groupCover(let slug): "/api/v1/groups/\(slug)/cover"
         case .join(let slug), .leave(let slug): "/api/v1/groups/\(slug)/membership"
+        case .groupRequests(let slug): "/api/v1/groups/\(slug)/requests"
+        case .approveRequest(let slug, let id): "/api/v1/groups/\(slug)/requests/\(id)/approve"
+        case .rejectRequest(let slug, let id):  "/api/v1/groups/\(slug)/requests/\(id)/reject"
+        case .cancelRequest(let slug): "/api/v1/groups/\(slug)/request"
         case .members(let slug):    "/api/v1/groups/\(slug)/members"
         case .kick(let slug, let uid): "/api/v1/groups/\(slug)/members/\(uid)"
         case .blocks, .block:       "/api/v1/blocks"
@@ -109,6 +116,8 @@ enum APIEndpoint: Sendable {
         switch self {
         case .deck(let context, let slug):
             slug == nil ? [URLQueryItem(name: "context", value: context.rawValue)] : []
+        case .likesReceived(let context):
+            context.map { [URLQueryItem(name: "context", value: $0.rawValue)] } ?? []
         case .messages(_, let before):
             before.map { [URLQueryItem(name: "before", value: $0)] } ?? []
         case .groups(let scope, let category, let query):

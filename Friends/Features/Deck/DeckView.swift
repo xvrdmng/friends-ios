@@ -3,8 +3,8 @@ import SwiftUI
 /// El mazo de swipe. El mismo componente sirve para citas, amistad, idiomas y
 /// grupos: solo cambia el `context` con el que se pide el mazo al servidor.
 ///
-/// En la pestana Friends hay un selector Amistad | Idiomas dentro de la misma
-/// pantalla.
+/// En la pestana Date hay un selector Citas | Amistad | Idiomas dentro de la
+/// misma pantalla.
 struct DeckView: View {
     let context: DeckContext
     var groupSlug: String? = nil
@@ -60,7 +60,7 @@ struct DeckView: View {
         let model = model
         NavigationStack {
             VStack(spacing: 12) {
-                if context == .friendship || context == .language { contextPicker }
+                if context != .group { contextPicker }
                 stack(model)
                 if case .ready = model.phase { actions(model) }
             }
@@ -150,6 +150,7 @@ struct DeckView: View {
 
     private var contextPicker: some View {
         Picker("Modo", selection: $active) {
+            Text("Citas").tag(DeckContext.dating)
             Text("Amistad").tag(DeckContext.friendship)
             Text("Idiomas").tag(DeckContext.language)
         }
@@ -346,7 +347,7 @@ struct DeckView: View {
 }
 
 /// Un view model por contexto, vivo mientras viva la pantalla: al alternar
-/// Amistad | Idiomas el mazo anterior sigue donde estaba.
+/// Citas | Amistad | Idiomas el mazo anterior sigue donde estaba.
 ///
 /// Es una clase corriente dentro de `@State`, no `@Observable`: quien dispara
 /// los redibujados es el `DeckViewModel`, y crear el que falta tiene que pasar

@@ -340,7 +340,7 @@ struct ProfileView: View {
     private func reload() async {
         await push.refreshAccess()
         await account.refresh()
-        likesReceived = try? await APIClient.shared.send(.likesReceived)
+        likesReceived = try? await APIClient.shared.send(.likesReceived(context: nil))
     }
 
     /// El JSON del servidor se guarda en un fichero temporal para poder compartirlo.

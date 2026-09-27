@@ -9,7 +9,7 @@ final class TabsUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        for tab in ["Date", "Friends", "Groups", "Chats", "Profile"] {
+        for tab in ["Date", "Likes", "Groups", "Chats", "Profile"] {
             let button = app.buttons[tab]
             XCTAssertTrue(button.waitForExistence(timeout: 20), "no aparecio la pestana \(tab)")
             button.tap()

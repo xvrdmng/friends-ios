@@ -83,6 +83,7 @@ final class GroupsViewModel {
 final class GroupDetailViewModel {
     private(set) var group: FriendGroup
     private(set) var members: [Person] = []
+    private(set) var requests: [JoinRequestItem] = []
     private(set) var isWorking = false
     var error: AlertMessage?
 
@@ -98,26 +99,50 @@ final class GroupDetailViewModel {
         if group.isMember, let response: MembersResponse = try? await api.send(.members(slug: group.slug)) {
             members = response.members
         }
+        if group.canModerate, group.isPrivate,
+           let response: JoinRequestsResponse = try? await api.send(.groupRequests(slug: group.slug)) {
+            requests = response.requests
+        }
     }
 
-    /// Devuelve el grupo ya actualizado si la pertenencia cambio.
-    func join(inviteCode: String? = nil) async -> FriendGroup? {
+    /// Devuelve el grupo ya actualizado si la pertenencia cambio. En un grupo
+    /// privado no cambia: queda una peticion pendiente y `group.hasRequested`.
+    func join() async -> FriendGroup? {
         isWorking = true
         defer { isWorking = false }
         do {
-            let response: JoinResponse = try await api.send(.join(slug: group.slug), body: JoinRequest(inviteCode: inviteCode))
-            guard response.joined else {
-                self.error = AlertMessage("No se pudo unir al grupo")
-                return nil
-            }
+            let response: JoinResponse = try await api.send(.join(slug: group.slug))
             await load()
-            return group
+            if response.joined { return group }
+            if response.requested != true { self.error = AlertMessage("No se pudo unir al grupo") }
+            return nil
         } catch APIError.server(_, let message) {
             self.error = AlertMessage("No se pudo unir al grupo", message: message)
             return nil
         } catch {
             self.error = AlertMessage("No se pudo unir al grupo")
             return nil
+        }
+    }
+
+    func cancelRequest() async {
+        do {
+            try await api.send(.cancelRequest(slug: group.slug))
+            await load()
+        } catch {
+            self.error = AlertMessage("No se pudo retirar la solicitud")
+        }
+    }
+
+    func decide(_ request: JoinRequestItem, approve: Bool) async {
+        do {
+            try await api.send(approve ? .approveRequest(slug: group.slug, id: request.id)
+                                       : .rejectRequest(slug: group.slug, id: request.id))
+            requests.removeAll { $0.id == request.id }
+            await load()
+        } catch {
+            self.error = AlertMessage(approve ? "No se pudo aceptar" : "No se pudo rechazar",
+                                      message: "Inténtalo de nuevo.")
         }
     }
 

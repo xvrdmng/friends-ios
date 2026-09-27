@@ -5,14 +5,26 @@ struct GroupsView: View {
     @State private var model = GroupsViewModel()
     @State private var open: FriendGroup?
     @State private var showCreate = false
+    @State private var showMap = false
 
     var body: some View {
         NavigationStack {
-            content
+            Group {
+                if showMap && model.phase == .ready {
+                    GroupsMapView(groups: model.mine + model.discover) { open = $0 }
+                } else {
+                    content
+                }
+            }
                 .navigationTitle("Grupos")
                 .searchable(text: Bindable(model).query, prompt: "Buscar grupos")
                 .refreshable { await model.load() }
                 .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(showMap ? "Lista" : "Mapa", systemImage: showMap ? "list.bullet" : "map") {
+                            showMap.toggle()
+                        }
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         Button("Crear grupo", systemImage: "plus") { showCreate = true }
                     }

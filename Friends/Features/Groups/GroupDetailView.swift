@@ -10,9 +10,7 @@ struct GroupDetailView: View {
     @State private var model: GroupDetailViewModel
     @State private var showDeck = false
     @State private var confirmLeave = false
-    @State private var askInviteCode = false
     // (el dialogo de expulsar comparte presentacion con el de salir)
-    @State private var inviteCode = ""
     @State private var report: ReportTarget?
     @State private var kickTarget: Person?
 
@@ -53,6 +51,7 @@ struct GroupDetailView: View {
 
                 Section { actions }
 
+                if !model.requests.isEmpty { requestsSection }
                 if current.isMember { membersSection }
             }
             .listStyle(.insetGrouped)
@@ -64,11 +63,6 @@ struct GroupDetailView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        if let code = current.inviteCode, current.canModerate {
-                            Button("Copiar código de invitación", systemImage: "doc.on.doc") {
-                                UIPasteboard.general.string = code
-                            }
-                        }
                         Button("Reportar grupo", systemImage: "flag") {
                             report = ReportTarget(kind: .group, id: current.id, userID: nil, displayName: current.name)
                         }
@@ -89,11 +83,6 @@ struct GroupDetailView: View {
                      groupName: current.name) { showDeck = false }
         }
         .sheet(item: $report) { target in ReportSheet(target: target) { _ in onClose() } }
-        .alert("Grupo privado", isPresented: $askInviteCode) {
-            TextField("Código de invitación", text: $inviteCode)
-            Button("Entrar") { Task { await join(code: inviteCode) } }
-            Button("Cancelar", role: .cancel) {}
-        } message: { Text("Pide el código a quien te invitó.") }
         .confirmationDialog(confirmLeave ? "¿Salir de \(current.name)?"
                                          : "¿Expulsar a \(kickTarget?.displayName ?? "")?",
                             isPresented: Binding(get: { confirmLeave || kickTarget != nil },
@@ -153,18 +142,50 @@ struct GroupDetailView: View {
         if current.isMember {
             Button("Ver el mazo del grupo", systemImage: "rectangle.stack") { showDeck = true }
                 .frame(maxWidth: .infinity)
+        } else if current.hasRequested {
+            Label("Solicitud enviada, esperando al administrador", systemImage: "hourglass")
+                .foregroundStyle(.secondary)
+            Button("Retirar solicitud", role: .destructive) { Task { await model.cancelRequest() } }
+                .frame(maxWidth: .infinity)
+        } else if current.wasRejected {
+            Label("El administrador rechazó tu solicitud", systemImage: "xmark.circle")
+                .foregroundStyle(.secondary)
         } else {
-            Button(model.isWorking ? "Entrando…" : "Unirme al grupo") {
-                if current.isPrivate { askInviteCode = true } else { Task { await join(code: nil) } }
-            }
-            .frame(maxWidth: .infinity)
-            .disabled(model.isWorking)
+            Button(joinTitle) { Task { await join() } }
+                .frame(maxWidth: .infinity)
+                .disabled(model.isWorking)
         }
     }
 
-    private func join(code: String?) async {
-        if let joined = await model.join(inviteCode: code?.isEmpty == true ? nil : code) {
-            onJoined(joined)
+    private var joinTitle: String {
+        if model.isWorking { return current.isPrivate ? "Enviando…" : "Entrando…" }
+        return current.isPrivate ? "Solicitar entrar" : "Unirme al grupo"
+    }
+
+    private func join() async {
+        if let joined = await model.join() { onJoined(joined) }
+    }
+
+    // MARK: - Solicitudes (solo quien modera)
+
+    private var requestsSection: some View {
+        Section("Solicitudes (\(model.requests.count))") {
+            ForEach(model.requests) { request in
+                HStack(spacing: 12) {
+                    AvatarView(url: request.thumbUrl, name: request.displayName, size: 44)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(request.displayName).font(.headline).lineLimit(1)
+                        if let age = request.age {
+                            Text("\(age) años").font(.subheadline).foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer(minLength: 4)
+                    Button("Rechazar", systemImage: "xmark") { Task { await model.decide(request, approve: false) } }
+                        .labelStyle(.iconOnly).buttonStyle(.bordered).tint(.red)
+                    Button("Aceptar", systemImage: "checkmark") { Task { await model.decide(request, approve: true) } }
+                        .labelStyle(.iconOnly).buttonStyle(.borderedProminent).tint(.green)
+                }
+            }
         }
     }
 
