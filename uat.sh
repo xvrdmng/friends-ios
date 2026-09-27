@@ -5,8 +5,8 @@
 #   ./uat.sh            compila y lanza los dos
 #   ./uat.sh --no-build usa lo ya compilado (mas rapido)
 #
-# Las cuentas salen del atajo de desarrollo: el simulador B recibe
-# DEV_HANDLE=u_dev2 y entra como "Dev 2" en vez de como "Dev".
+# Las cuentas salen del atajo de desarrollo: cada simulador recibe su DEV_HANDLE
+# (A u_dev, B u_dev2) y entra solo, sin tocar la pantalla de passkey.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -81,7 +81,7 @@ for D in "$A" "$B"; do
   xcrun simctl terminate "$D" "$BUNDLE" >/dev/null 2>&1 || true
 done
 
-xcrun simctl launch "$A" "$BUNDLE" >/dev/null
+SIMCTL_CHILD_DEV_HANDLE=u_dev xcrun simctl launch "$A" "$BUNDLE" >/dev/null
 SIMCTL_CHILD_DEV_HANDLE=u_dev2 xcrun simctl launch "$B" "$BUNDLE" >/dev/null
 # Simulator.app vive dentro de Xcode, no en /Applications.
 open -a "$(xcode-select -p)/Applications/Simulator.app" 2>/dev/null || open -a Simulator 2>/dev/null || true

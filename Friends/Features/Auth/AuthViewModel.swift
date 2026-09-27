@@ -20,59 +20,66 @@ final class AuthViewModel {
         self.passkeys = passkeys
     }
 
-    func register() async {
-        await perform {
-            let options: ChallengeResponse = try await self.api.send(.registrationOptions)
-            let challenge = try PasskeyService.challengeData(from: options.publicKey.challenge)
-            let name = options.publicKey.user?.name ?? "Friends"
-
-            let authorization = try await self.passkeys.register(
-                challenge: challenge,
-                userID: Data((options.publicKey.user?.id ?? UUID().uuidString).utf8),
-                name: name
-            )
-
-            guard let credential = authorization.credential
-                    as? ASAuthorizationPlatformPublicKeyCredentialRegistration else {
-                throw PasskeyService.CredentialError.unexpectedCredentialType
-            }
-
-            let response: AuthResponse = try await self.api.send(
-                .registration,
-                body: CredentialSubmission(
-                    challengeToken: options.challengeToken,
-                    credential: PasskeyService.payload(from: credential),
-                    deviceName: UIDevice.current.name
-                ),
-                snakeCase: false
-            )
-            return response
+    /// Un solo boton para todo: si la persona ya tiene passkey entra, y si no la
+    /// tiene se crea la cuenta. Primero se intenta entrar con las credenciales
+    /// que YA hay disponibles, sin abrir ninguna hoja. Si iOS contesta al
+    /// instante que no hay ninguna, se pasa al alta. Una hoja de Face ID que la
+    /// persona cancela tarda mucho mas que eso, y entonces no se hace nada.
+    func continueWithPasskey() async {
+        let start = ContinuousClock.now
+        let outcome = await perform { try await self.signInCeremony() }
+        if outcome == .canceled, ContinuousClock.now - start < .milliseconds(800) {
+            await perform { try await self.registerCeremony() }
         }
     }
 
-    func signIn() async {
-        await perform {
-            let options: ChallengeResponse = try await self.api.send(.sessionOptions)
-            let challenge = try PasskeyService.challengeData(from: options.publicKey.challenge)
+    private func registerCeremony() async throws -> AuthResponse {
+        let options: ChallengeResponse = try await api.send(.registrationOptions)
+        let challenge = try PasskeyService.challengeData(from: options.publicKey.challenge)
+        let name = options.publicKey.user?.name ?? "Friends"
 
-            let authorization = try await self.passkeys.signIn(challenge: challenge)
+        let authorization = try await passkeys.register(
+            challenge: challenge,
+            userID: Data((options.publicKey.user?.id ?? UUID().uuidString).utf8),
+            name: name
+        )
 
-            guard let credential = authorization.credential
-                    as? ASAuthorizationPlatformPublicKeyCredentialAssertion else {
-                throw PasskeyService.CredentialError.unexpectedCredentialType
-            }
-
-            let response: AuthResponse = try await self.api.send(
-                .session,
-                body: CredentialSubmission(
-                    challengeToken: options.challengeToken,
-                    credential: PasskeyService.payload(from: credential),
-                    deviceName: UIDevice.current.name
-                ),
-                snakeCase: false
-            )
-            return response
+        guard let credential = authorization.credential
+                as? ASAuthorizationPlatformPublicKeyCredentialRegistration else {
+            throw PasskeyService.CredentialError.unexpectedCredentialType
         }
+
+        return try await api.send(
+            .registration,
+            body: CredentialSubmission(
+                challengeToken: options.challengeToken,
+                credential: PasskeyService.payload(from: credential),
+                deviceName: UIDevice.current.name
+            ),
+            snakeCase: false
+        )
+    }
+
+    private func signInCeremony() async throws -> AuthResponse {
+        let options: ChallengeResponse = try await api.send(.sessionOptions)
+        let challenge = try PasskeyService.challengeData(from: options.publicKey.challenge)
+
+        let authorization = try await passkeys.signIn(challenge: challenge)
+
+        guard let credential = authorization.credential
+                as? ASAuthorizationPlatformPublicKeyCredentialAssertion else {
+            throw PasskeyService.CredentialError.unexpectedCredentialType
+        }
+
+        return try await api.send(
+            .session,
+            body: CredentialSubmission(
+                challengeToken: options.challengeToken,
+                credential: PasskeyService.payload(from: credential),
+                deviceName: UIDevice.current.name
+            ),
+            snakeCase: false
+        )
     }
 
     #if DEBUG
@@ -82,7 +89,11 @@ final class AuthViewModel {
     /// personas (match, chat, bloqueo): se lanzan dos simuladores con handles
     /// distintos. Por argumento de lanzamiento `-DevHandle u_dev2`, por la
     /// variable de entorno `DEV_HANDLE`, o `u_dev` si no se dice nada.
-    static var developmentHandle: String {
+    static var developmentHandle: String { explicitDevelopmentHandle ?? "u_dev" }
+
+    /// Solo hay atajo si alguien lo pidio: la pantalla de entrada ya no tiene
+    /// boton de prueba, asi que sin handle explicito se ve la puerta real.
+    static var explicitDevelopmentHandle: String? {
         let candidates = [
             ProcessInfo.processInfo.environment["DEV_HANDLE"],
             UserDefaults.standard.string(forKey: "DevHandle")
@@ -91,7 +102,7 @@ final class AuthViewModel {
             let handle = candidate?.trimmingCharacters(in: .whitespaces) ?? ""
             if !handle.isEmpty { return handle }
         }
-        return "u_dev"
+        return nil
     }
 
     /// Atajo de desarrollo: pide una sesion al servidor sin passkey.
@@ -105,8 +116,11 @@ final class AuthViewModel {
 
     // MARK: -
 
-    private func perform(_ ceremony: @escaping () async throws -> AuthResponse) async {
-        guard !isWorking else { return }
+    enum Outcome { case signedIn, canceled, failed, busy }
+
+    @discardableResult
+    private func perform(_ ceremony: @escaping () async throws -> AuthResponse) async -> Outcome {
+        guard !isWorking else { return .busy }
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
@@ -115,11 +129,14 @@ final class AuthViewModel {
             let response = try await ceremony()
             await SessionStore.shared.store(response.token)
             session.didSignIn(needsOnboarding: !response.user.onboardingCompleted)
+            return .signedIn
         } catch let error as ASAuthorizationError where error.code == .canceled {
-            // El usuario cerro la hoja de Face ID: no es un error que mostrar.
-            return
+            // El usuario cerro la hoja de Face ID (o no habia ninguna passkey):
+            // no es un error que mostrar.
+            return .canceled
         } catch {
             errorMessage = Self.describe(error)
+            return .failed
         }
     }
 
@@ -128,7 +145,7 @@ final class AuthViewModel {
         // identifier. Pasa siempre hasta que haya cuenta de Apple Developer,
         // asi que se explica en lugar de mostrar el texto de Apple.
         if (error as NSError).localizedDescription.contains("application identifier") {
-            return "Las passkeys necesitan una cuenta de Apple Developer para firmar la app. Usa \"Entrar sin passkey (dev)\" mientras tanto."
+            return "Las passkeys necesitan que la app este firmada con una cuenta de Apple Developer."
         }
 
         return switch error {

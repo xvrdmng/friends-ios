@@ -23,32 +23,17 @@ struct PasskeyGateView: View {
 
             Spacer()
 
-            VStack(spacing: 12) {
-                Button("Crear cuenta con passkey") {
-                    Task { await model?.register() }
-                }
-                .buttonStyle(.glassProminent)
-
-                Button("Entrar con mi passkey") {
-                    Task { await model?.signIn() }
-                }
-                .buttonStyle(.glass)
-
-                #if DEBUG
-                // Las passkeys necesitan un dominio asociado firmado con una
-                // cuenta de Apple Developer. Mientras no la haya, esta puerta
-                // trasera deja seguir construyendo el resto de la app.
-                // El handle va en el boton: en UAT se lanzan dos simuladores con
-                // cuentas distintas y hay que saber cual es cual de un vistazo.
-                Button("Entrar sin passkey · \(AuthViewModel.developmentHandle)") {
-                    Task { await model?.signInForDevelopment() }
-                }
-                .buttonStyle(.glass)
-                .tint(.orange)
-                #endif
+            Button {
+                Task { await model?.continueWithPasskey() }
+            } label: {
+                Label("Continuar con Passkey", systemImage: "person.badge.key.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 18)
+                    .foregroundStyle(Color(.systemBackground))
+                    .background(Color(.label), in: .rect(cornerRadius: 22, style: .continuous))
             }
-            .controlSize(.large)
-            .frame(maxWidth: .infinity)
+            .buttonStyle(.plain)
             .disabled(model?.isWorking ?? true)
 
             Label("Passkey · Face ID", systemImage: "faceid")
@@ -72,6 +57,10 @@ struct PasskeyGateView: View {
         }
         .task {
             if model == nil { model = AuthViewModel(session: session) }
+            #if DEBUG
+            // uat.sh lanza cada simulador con su DEV_HANDLE: entran solos.
+            if AuthViewModel.explicitDevelopmentHandle != nil { await model?.signInForDevelopment() }
+            #endif
         }
     }
 }
