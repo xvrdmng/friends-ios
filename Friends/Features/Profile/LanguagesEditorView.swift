@@ -29,12 +29,12 @@ struct LanguagesEditorView: View {
                         }
                     }
                 } header: {
-                    Text("Hablo (nativo)")
+                    Text("Idiomas nativos")
                 } footer: {
                     Text("Elige al menos uno.")
                 }
 
-                Section("Estoy aprendiendo") {
+                Section("Idiomas que quiero aprender") {
                     ChipFlow {
                         ForEach(catalog.filter { !native.contains($0.id) }) { language in
                             ChoiceChip(label: language.name, isSelected: learning[language.id] != nil) {

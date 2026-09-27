@@ -9,7 +9,7 @@ struct ProfileView: View {
     @State private var push = PushService.shared
     @State private var likesReceived: ReceivedLikesResponse?
     @State private var isDeleting = false
-    @State private var isRestoring = false
+    @State private var languageNames: [String: String] = [:]
     @State private var error: AlertMessage?
 
     /// Una sola presentacion, no una por pantalla: SwiftUI solo respeta UN
@@ -73,6 +73,8 @@ struct ProfileView: View {
                 premiumSection
                 likesSection
                 aboutSection
+                datingSection
+                languagesSection
                 settingsSection
                 accountSection
                 legalSection
@@ -93,7 +95,7 @@ struct ProfileView: View {
             case .edit:      EditProfileView { Task { await reload() } }
             case .photos:    PhotosManagerView { Task { await reload() } }
             case .filters:   FiltersView()
-            case .languages: LanguagesEditorView()
+            case .languages: LanguagesEditorView { Task { await reload() } }
             case .preview:   ProfilePreviewView(me: account.me)
             case .blocked:   NavigationStack { BlockedUsersView() }
             case .export(let url):     ShareSheet(url: url)
@@ -260,6 +262,60 @@ struct ProfileView: View {
         }
     }
 
+    /// A quien se le ensena en el mazo de citas. Lo mismo que se elige al
+    /// registrarse, pero editable: antes solo se podia cambiar rehaciendo el alta.
+    private var datingSection: some View {
+        Section {
+            Picker("Mostrarme en Citas", selection: Binding(
+                get: { profile?.datingPreference ?? "everyone" },
+                set: { value in Task { await saveDatingPreference(value) } }
+            )) {
+                Text("Mujeres").tag("women")
+                Text("Hombres").tag("men")
+                Text("Todos").tag("everyone")
+            }
+        } header: {
+            Text("Citas")
+        } footer: {
+            Text("Solo afecta al mazo de citas.")
+        }
+    }
+
+    private var languagesSection: some View {
+        let entries = account.me?.languages ?? []
+        let native = entries.filter { $0.kind == "native" }
+        let learning = entries.filter { $0.kind == "learning" }
+        return Section("Idiomas") {
+            languageRow("Idiomas nativos", native.map { languageNames[$0.languageId] ?? "…" })
+            languageRow("Quiero aprender", learning.map {
+                "\(languageNames[$0.languageId] ?? "…")\($0.level.map { " " + $0.uppercased() } ?? "")"
+            })
+            Button("Editar idiomas", systemImage: "character.bubble") { sheet = .languages }
+        }
+    }
+
+    private func languageRow(_ title: String, _ names: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.subheadline).foregroundStyle(.secondary)
+            if names.isEmpty {
+                Text("Ninguno todavía").foregroundStyle(.tertiary)
+            } else {
+                ChipFlow { ForEach(names, id: \.self) { Tag(text: $0) } }
+            }
+        }
+    }
+
+    private func saveDatingPreference(_ value: String) async {
+        var payload = OnboardingPayload()
+        payload.datingPreference = value
+        do {
+            try await APIClient.shared.send(.onboarding, body: payload)
+            await account.refresh()
+        } catch {
+            self.error = AlertMessage("No se pudo guardar", message: "Inténtalo de nuevo.")
+        }
+    }
+
     private var traits: [String] {
         guard let profile else { return [] }
         return [
@@ -278,7 +334,6 @@ struct ProfileView: View {
             notificationsRow
             Button("Ver cómo te ven", systemImage: "eye") { sheet = .preview }
             Button("Filtros de búsqueda", systemImage: "line.3.horizontal.decrease") { sheet = .filters }
-            Button("Tus idiomas", systemImage: "character.bubble") { sheet = .languages }
             Button("Cuentas bloqueadas", systemImage: "hand.raised") { sheet = .blocked }
         }
     }
@@ -307,12 +362,6 @@ struct ProfileView: View {
 
     private var accountSection: some View {
         Section("Cuenta") {
-            // Quien ya pago y reinstala la app no tiene por que topar primero
-            // con el paywall para recuperar su suscripcion.
-            Button(isRestoring ? "Restaurando…" : "Restaurar compras", systemImage: "arrow.clockwise") {
-                Task { await restorePurchases() }
-            }
-            .disabled(isRestoring)
             Button("Descargar mis datos", systemImage: "square.and.arrow.down") { Task { await export() } }
             Button("Cerrar sesión", systemImage: "rectangle.portrait.and.arrow.right") { confirm = .signOut }
             Button("Borrar mi cuenta", systemImage: "trash", role: .destructive) { confirm = .delete }
@@ -341,6 +390,9 @@ struct ProfileView: View {
         await push.refreshAccess()
         await account.refresh()
         likesReceived = try? await APIClient.shared.send(.likesReceived(context: nil))
+        if languageNames.isEmpty, let response: LanguagesResponse = try? await APIClient.shared.send(.languages) {
+            languageNames = Dictionary(uniqueKeysWithValues: response.languages.map { ($0.id, $0.name) })
+        }
     }
 
     /// El JSON del servidor se guarda en un fichero temporal para poder compartirlo.
@@ -352,18 +404,6 @@ struct ProfileView: View {
             sheet = .export(url)
         } catch {
             self.error = AlertMessage("No se pudieron descargar tus datos")
-        }
-    }
-
-    private func restorePurchases() async {
-        isRestoring = true
-        defer { isRestoring = false }
-        await store.restore()
-        if let message = store.errorMessage {
-            error = AlertMessage("No se pudieron restaurar las compras", message: message)
-        } else if !store.isPremium {
-            error = AlertMessage("No encontramos ninguna suscripción",
-                                 message: "Con esta cuenta de Apple no hay ninguna compra que recuperar.")
         }
     }
 
