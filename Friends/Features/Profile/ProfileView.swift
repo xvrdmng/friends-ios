@@ -418,6 +418,9 @@ struct ProfileView: View {
             Link(destination: LegalLinks.privacy) {
                 Label("Privacidad", systemImage: "hand.raised.square")
             }
+            Link(destination: LegalLinks.support) {
+                Label("Soporte", systemImage: "questionmark.circle")
+            }
         } footer: {
             Text("Friends \(Bundle.appVersion)")
         }

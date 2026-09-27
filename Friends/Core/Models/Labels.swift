@@ -27,4 +27,5 @@ enum Labels {
 enum LegalLinks {
     static let terms = URL(string: "https://friends-api.toolazy.cl/terms")!
     static let privacy = URL(string: "https://friends-api.toolazy.cl/privacy")!
+    static let support = URL(string: "https://friends-api.toolazy.cl/support")!
 }

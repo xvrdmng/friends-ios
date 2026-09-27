@@ -39,7 +39,7 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         PRODUCT_BUNDLE_IDENTIFIER: cl.toolazy.friends
         PRODUCT_NAME: Friends
-        MARKETING_VERSION: "0.1.0"
+        MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1"     # solo iPhone
         # Las entitlements van por configuracion: `aps-environment` tiene que
@@ -67,6 +67,10 @@ targets:
         NSCameraUsageDescription: "Para que puedas tomarte una foto de perfil."
         NSPhotoLibraryUsageDescription: "Para que elijas las fotos de tu perfil."
         APIBaseURL: "$(API_BASE_URL)"
+        # La app solo usa HTTPS y el cifrado del sistema, asi que queda exenta.
+        # Sin esta clave App Store Connect repite la pregunta de exportacion en
+        # cada build.
+        ITSAppUsesNonExemptEncryption: false
         # Permite HTTP contra localhost en desarrollo. No abre trafico HTTP
         # arbitrario a internet: solo red local.
         NSAppTransportSecurity:
