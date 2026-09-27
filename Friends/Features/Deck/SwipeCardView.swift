@@ -108,7 +108,7 @@ struct ProfileCardView: View {
     private var languageLine: some View {
         let native = card.languages.filter { $0.kind == "native" }.map(\.name).joined(separator: ", ")
         let learning = card.languages.filter { $0.kind == "learning" }
-            .map { "\($0.name)\($0.level.map { " (\($0.uppercased()))" } ?? "")" }
+            .map(\.name)
             .joined(separator: ", ")
         return VStack(alignment: .leading, spacing: 2) {
             if !native.isEmpty { Label("Habla \(native)", systemImage: "quote.bubble") }

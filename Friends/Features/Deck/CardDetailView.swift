@@ -89,7 +89,7 @@ struct CardDetailView: View {
         section("Idiomas") {
             ForEach(card.languages, id: \.code) { language in
                 Label {
-                    Text("\(language.name)\(language.level.map { " · \($0.uppercased())" } ?? "")")
+                    Text(language.name)
                 } icon: {
                     Image(systemName: language.kind == "native" ? "quote.bubble" : "book")
                 }

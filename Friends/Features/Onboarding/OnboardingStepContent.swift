@@ -150,29 +150,7 @@ struct OnboardingStepContent: View {
                     }
                 }
             }
-
-            let learning = model.languages.filter { model.learningLevels[$0.id] != nil }
-            if !learning.isEmpty {
-                VStack(spacing: 0) {
-                    ForEach(Array(learning.enumerated()), id: \.element.id) { index, language in
-                        if index > 0 { Divider().padding(.leading, 14) }
-                        levelRow(language)
-                    }
-                }
-                .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 12, style: .continuous))
-            }
         }
-    }
-
-    private func levelRow(_ language: LanguageItem) -> some View {
-        Picker(language.name, selection: Binding(
-            get: { model.learningLevels[language.id] ?? "a1" },
-            set: { model.learningLevels[language.id] = $0 }
-        )) {
-            ForEach(["a1", "a2", "b1", "b2", "c1", "c2"], id: \.self) { Text($0.uppercased()).tag($0) }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 4)
     }
 
     @State private var pickerItems: [PhotosPickerItem] = []
