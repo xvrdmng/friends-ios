@@ -25,6 +25,6 @@ enum Labels {
 /// Estan aqui, y no escritas a mano en cada pantalla, para que el paywall y el
 /// perfil no puedan acabar apuntando a sitios distintos.
 enum LegalLinks {
-    static let terms = URL(string: "https://toolazy.cl/friends/terminos")!
-    static let privacy = URL(string: "https://toolazy.cl/friends/privacidad")!
+    static let terms = URL(string: "https://friends-api.toolazy.cl/terms")!
+    static let privacy = URL(string: "https://friends-api.toolazy.cl/privacy")!
 }

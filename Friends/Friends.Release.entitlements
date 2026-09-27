@@ -2,12 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- El dominio asociado es toolazy.cl (dominio registrable padre), no
-	     friends-api.toolazy.cl: así la passkey vale para cualquier subdominio futuro.
-	     Requiere servir el AASA en https://toolazy.cl/.well-known/... -->
+	<!-- El dominio asociado es friends-api.toolazy.cl: el mismo host del API, que
+	     sirve el AASA en https://friends-api.toolazy.cl/.well-known/... -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>
-		<string>webcredentials:toolazy.cl</string>
+		<string>webcredentials:friends-api.toolazy.cl</string>
 		<string>applinks:friends-api.toolazy.cl</string>
 	</array>
 	<key>aps-environment</key>
