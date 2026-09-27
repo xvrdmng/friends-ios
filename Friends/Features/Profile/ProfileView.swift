@@ -74,6 +74,7 @@ struct ProfileView: View {
                 likesSection
                 aboutSection
                 datingSection
+                friendshipSection
                 languagesSection
                 settingsSection
                 accountSection
@@ -262,20 +263,36 @@ struct ProfileView: View {
         }
     }
 
-    /// A quien se le ensena en el mazo de citas. Lo mismo que se elige al
-    /// registrarse, pero editable: antes solo se podia cambiar rehaciendo el alta.
-    private var datingSection: some View {
-        Section("Citas") {
-            Text("Mostrarme en Citas")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            ChipFlow {
-                ForEach([("Mujeres", "women"), ("Hombres", "men"), ("Todos", "everyone")], id: \.1) { label, value in
-                    ChoiceChip(label: label, isSelected: (profile?.datingPreference ?? "everyone") == value) {
-                        Task { await saveDatingPreference(value) }
+    private enum Mode { case dating, friendship }
+
+    /// Citas y Amistad: un interruptor para aparecer y ver gente en ese modo, y
+    /// a quien se le ensena. Cada modo guarda su propia preferencia.
+    private var datingSection: some View { modeSection(.dating) }
+    private var friendshipSection: some View { modeSection(.friendship) }
+
+    private func modeSection(_ mode: Mode) -> some View {
+        let isDating = mode == .dating
+        let enabled = (isDating ? profile?.modeDating : profile?.modeFriendship) ?? isDating
+        let preference = (isDating ? profile?.datingPreference : profile?.friendshipPreference) ?? "everyone"
+        return Section {
+            Toggle(isDating ? "Mostrarme en Citas" : "Mostrarme en Amistad", isOn: Binding(
+                get: { enabled },
+                set: { on in Task { await saveMode(mode, enabled: on) } }
+            ))
+            if enabled {
+                Text(isDating ? "Quiero conocer a" : "Quiero hacer amistad con")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                ChipFlow {
+                    ForEach([("Mujeres", "women"), ("Hombres", "men"), ("Todos", "everyone")], id: \.1) { label, value in
+                        ChoiceChip(label: label, isSelected: preference == value) {
+                            Task { await savePreference(mode, value) }
+                        }
                     }
                 }
             }
+        } header: {
+            Text(isDating ? "Citas" : "Amistad")
         }
     }
 
@@ -288,9 +305,7 @@ struct ProfileView: View {
             Button { sheet = .languages } label: {
                 VStack(alignment: .leading, spacing: 14) {
                     languageRow("Idiomas nativos", native.map { languageNames[$0.languageId] ?? "…" })
-                    languageRow("Quiero aprender", learning.map {
-                        "\(languageNames[$0.languageId] ?? "…")\($0.level.map { " " + $0.uppercased() } ?? "")"
-                    })
+                    languageRow("Quiero aprender", learning.map { languageNames[$0.languageId] ?? "…" })
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(.rect)
@@ -302,18 +317,28 @@ struct ProfileView: View {
 
     private func languageRow(_ title: String, _ names: [String]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.subheadline).foregroundStyle(.secondary)
+            Text(title).font(.headline)
             if names.isEmpty {
                 Text("Ninguno todavía").foregroundStyle(.tertiary)
             } else {
-                ChipFlow { ForEach(names, id: \.self) { Tag(text: $0) } }
+                ChipFlow { ForEach(names, id: \.self) { Tag(text: $0, large: true) } }
             }
         }
     }
 
-    private func saveDatingPreference(_ value: String) async {
+    private func saveMode(_ mode: Mode, enabled: Bool) async {
         var payload = OnboardingPayload()
-        payload.datingPreference = value
+        if mode == .dating { payload.modeDating = enabled } else { payload.modeFriendship = enabled }
+        await save(payload)
+    }
+
+    private func savePreference(_ mode: Mode, _ value: String) async {
+        var payload = OnboardingPayload()
+        if mode == .dating { payload.datingPreference = value } else { payload.friendshipPreference = value }
+        await save(payload)
+    }
+
+    private func save(_ payload: OnboardingPayload) async {
         do {
             try await APIClient.shared.send(.onboarding, body: payload)
             await account.refresh()

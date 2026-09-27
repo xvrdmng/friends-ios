@@ -58,6 +58,7 @@ struct OnboardingPayload: Encodable, Sendable {
     var birthdate: String?
     var gender: String?
     var datingPreference: String?
+    var friendshipPreference: String?
     var modeDating: Bool?
     var modeFriendship: Bool?
     var modeLanguage: Bool?
@@ -79,6 +80,7 @@ struct OnboardingPayload: Encodable, Sendable {
         case birthdate
         case gender
         case datingPreference = "dating_preference"
+        case friendshipPreference = "friendship_preference"
         case modeDating       = "mode_dating"
         case modeFriendship   = "mode_friendship"
         case modeLanguage     = "mode_language"
@@ -112,6 +114,7 @@ struct MeResponse: Decodable, Sendable {
         var birthdate: String?
         var gender: String?
         var datingPreference: String?
+        var friendshipPreference: String? = nil
         var modeDating: Bool?
         var modeFriendship: Bool?
         var modeLanguage: Bool?

@@ -84,13 +84,15 @@ struct ChipFlow: Layout {
 struct Tag: View {
     let text: String
     var tint: Color = .secondary
+    /// Version grande, para lo que es el contenido de una tarjeta (idiomas) y no una etiqueta.
+    var large = false
 
     var body: some View {
         Text(text)
-            .font(.caption)
+            .font(large ? .body : .caption)
             .foregroundStyle(tint)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
+            .padding(.horizontal, large ? 14 : 8)
+            .padding(.vertical, large ? 7 : 3)
             .background(tint.opacity(0.14), in: .capsule)
     }
 }
