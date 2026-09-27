@@ -28,7 +28,7 @@ targets:
           # trabaja contra el Rails local con el atajo /auth/dev_session.
           API_BASE_URL: http://localhost:3000
         Release:
-          API_BASE_URL: https://api.toolazy.cl
+          API_BASE_URL: https://friends-api.toolazy.cl
           CODE_SIGN_ENTITLEMENTS: Friends/Friends.Release.entitlements
       base:
         # Sin esto, Color.accentColor cae en el azul del sistema y el tinte de

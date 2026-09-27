@@ -5,7 +5,7 @@ import UIKit
 /// Alta e inicio de sesión con passkey.
 ///
 /// El relying party es `toolazy.cl` (el dominio registrable padre), no el host del
-/// API: así la credencial vale para api.toolazy.cl y cualquier subdominio futuro.
+/// API: así la credencial vale para friends-api.toolazy.cl y cualquier subdominio futuro.
 /// Cambiarlo más adelante invalidaría todas las passkeys ya emitidas.
 @MainActor
 final class PasskeyService: NSObject {

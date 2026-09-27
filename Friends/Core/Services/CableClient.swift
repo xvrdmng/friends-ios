@@ -23,7 +23,7 @@ final class CableClient {
         if let baseURL { self.baseURL = baseURL }
         else {
             let value = Bundle.main.object(forInfoDictionaryKey: "APIBaseURL") as? String
-            self.baseURL = URL(string: value ?? "https://api.toolazy.cl")!
+            self.baseURL = URL(string: value ?? "https://friends-api.toolazy.cl")!
         }
     }
 

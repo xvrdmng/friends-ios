@@ -3,12 +3,12 @@
 <plist version="1.0">
 <dict>
 	<!-- El dominio asociado es toolazy.cl (dominio registrable padre), no
-	     api.toolazy.cl: así la passkey vale para cualquier subdominio futuro.
+	     friends-api.toolazy.cl: así la passkey vale para cualquier subdominio futuro.
 	     Requiere servir el AASA en https://toolazy.cl/.well-known/... -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>webcredentials:toolazy.cl</string>
-		<string>applinks:api.toolazy.cl</string>
+		<string>applinks:friends-api.toolazy.cl</string>
 	</array>
 	<!-- Sandbox de APNs. La build que se sube usa Friends.Release.entitlements,
 	     con "production": un token de un entorno no vale en el otro. -->

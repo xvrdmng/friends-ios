@@ -14,7 +14,7 @@ final class APIClient: Sendable {
     /// apuntar al dominio real.
     private let baseURL: URL = {
         let value = Bundle.main.object(forInfoDictionaryKey: "APIBaseURL") as? String
-        return URL(string: value ?? "https://api.toolazy.cl")!
+        return URL(string: value ?? "https://friends-api.toolazy.cl")!
     }()
 
     private let session: URLSession
